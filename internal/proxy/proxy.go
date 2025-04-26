@@ -4,28 +4,16 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-
-	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
 )
 
-type Proxy struct {
-	config  *config.Config
-	hostMap map[string]string
+var hostMap = map[string]string{
+	"example.com":    "http://localhost:8081",
+	"test.com":       "http://localhost:8082",
+	"localhost:8080": "https://kamdoautoskoly.cz",
 }
 
-func NewProxy(cfg *config.Config) *Proxy {
-	return &Proxy{
-		config: cfg,
-		hostMap: map[string]string{
-			"example.com":    "http://localhost:8081",
-			"test.com":       "http://localhost:8082",
-			"localhost:8080": "https://kamdoautoskoly.cz",
-		},
-	}
-}
-
-func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
-	targetBase, ok := p.hostMap[r.Host]
+func ProxyHandler(w http.ResponseWriter, r *http.Request) {
+	targetBase, ok := hostMap[r.Host]
 	if !ok {
 		http.Error(w, "Host '"+r.Host+"' not found", http.StatusBadGateway)
 		return
