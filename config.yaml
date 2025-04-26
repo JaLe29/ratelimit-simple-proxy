@@ -1,0 +1,21 @@
+ipHeader:
+  headers:
+    - X-Forwarded-For
+    - X-Real-IP
+    - RemoteAddr
+
+rateLimits:
+  - source: "public"
+    destination: "api/auth"
+    requests: 10
+    perSecond: 60  # 10 req/min
+
+  - source: "authenticated"
+    destination: "api/users"
+    requests: 50
+    perSecond: 1   # 50 req/sec
+
+  - source: "internal"
+    destination: "api/admin"
+    requests: 1000
+    perSecond: 1   # 1000 req/sec
