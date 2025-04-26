@@ -5,17 +5,17 @@ ipHeader:
     - RemoteAddr
 
 rateLimits:
-  - source: "public"
-    destination: "api/auth"
+  localhost:8080:
+    destination: "https://kamdoautoskoly.cz"
     requests: 10
-    perSecond: 60  # 10 req/min
+    perSecond: 60
 
-  - source: "authenticated"
+  users:
     destination: "api/users"
     requests: 50
-    perSecond: 1   # 50 req/sec
+    perSecond: 1
 
-  - source: "internal"
+  admin:
     destination: "api/admin"
     requests: 1000
-    perSecond: 1   # 1000 req/sec
+    perSecond: 1

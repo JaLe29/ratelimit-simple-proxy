@@ -13,7 +13,6 @@ type IPHeaderConfig struct {
 
 // RateLimitConfig definuje rate limity pro source->destination
 type RateLimitConfig struct {
-	Source      string `mapstructure:"source"`
 	Destination string `mapstructure:"destination"`
 	Requests    int    `mapstructure:"requests"`  // počet požadavků
 	PerSecond   int    `mapstructure:"perSecond"` // časové okno v sekundách
@@ -21,8 +20,8 @@ type RateLimitConfig struct {
 
 // Config reprezentuje celou konfiguraci aplikace
 type Config struct {
-	IPHeader   IPHeaderConfig    `mapstructure:"ipHeader"`
-	RateLimits []RateLimitConfig `mapstructure:"rateLimits"`
+	IPHeader   IPHeaderConfig             `mapstructure:"ipHeader"`
+	RateLimits map[string]RateLimitConfig `mapstructure:"rateLimits"`
 }
 
 // LoadConfig načte konfiguraci pomocí Viper
@@ -59,18 +58,16 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("není definován žádný header pro IP")
 	}
 
-	for i, rl := range config.RateLimits {
-		if rl.Source == "" {
-			return nil, fmt.Errorf("u rate limitu #%d chybí source", i+1)
-		}
+	// Validace rate limitů v mapě
+	for key, rl := range config.RateLimits {
 		if rl.Destination == "" {
-			return nil, fmt.Errorf("u rate limitu #%d chybí destination", i+1)
+			return nil, fmt.Errorf("u rate limitu '%s' chybí destination", key)
 		}
 		if rl.Requests <= 0 {
-			return nil, fmt.Errorf("u rate limitu #%d je neplatný počet requestů: %d", i+1, rl.Requests)
+			return nil, fmt.Errorf("u rate limitu '%s' je neplatný počet requestů: %d", key, rl.Requests)
 		}
 		if rl.PerSecond <= 0 {
-			return nil, fmt.Errorf("u rate limitu #%d je neplatná hodnota perSecond: %d", i+1, rl.PerSecond)
+			return nil, fmt.Errorf("u rate limitu '%s' je neplatná hodnota perSecond: %d", key, rl.PerSecond)
 		}
 	}
 

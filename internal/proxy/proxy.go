@@ -1,25 +1,50 @@
 package proxy
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
 )
 
-var hostMap = map[string]string{
-	"example.com":    "http://localhost:8081",
-	"test.com":       "http://localhost:8082",
-	"localhost:8080": "https://kamdoautoskoly.cz",
+type Proxy struct {
+	config *config.Config
 }
 
-func ProxyHandler(w http.ResponseWriter, r *http.Request) {
-	targetBase, ok := hostMap[r.Host]
+func NewProxy(cfg *config.Config) *Proxy {
+	return &Proxy{
+		config: cfg,
+	}
+}
+
+func (p *Proxy) getClientIp(r *http.Request) string {
+	var clientIp string
+
+	for _, header := range p.config.IPHeader.Headers {
+		if ip := r.Header.Get(header); ip != "" {
+			clientIp = ip
+			break
+		}
+	}
+
+	return clientIp
+}
+
+func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
+
+	clientIp := p.getClientIp(r)
+
+	fmt.Println("Client IP:", clientIp)
+
+	target, ok := p.config.RateLimits[r.Host]
 	if !ok {
 		http.Error(w, "Host '"+r.Host+"' not found", http.StatusBadGateway)
 		return
 	}
 
-	targetURL, err := url.Parse(targetBase)
+	targetURL, err := url.Parse(target.Destination)
 	if err != nil {
 		http.Error(w, "Invalid target URL", http.StatusInternalServerError)
 		return
@@ -30,6 +55,7 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
 		return
 	}
+
 	proxyReq.Header = r.Header.Clone()
 
 	client := &http.Client{}

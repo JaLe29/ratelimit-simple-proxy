@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -10,24 +9,21 @@ import (
 )
 
 func main() {
-	// Načtení konfigurace
 	config, err := config.LoadConfig(".")
 	if err != nil {
-		log.Fatalf("Chyba při načítání konfigurace: %v", err)
+		log.Fatalf("Error loading config: %v", err)
 	}
 
-	// Výpis konfigurace
-	fmt.Println("Načtená konfigurace:")
-	fmt.Println("IP Headers:", config.IPHeader.Headers)
-	fmt.Println("Rate Limity:")
-	for i, rl := range config.RateLimits {
-		fmt.Printf("  #%d: %s -> %s, %d request(ů) za %d sekund(u)\n",
-			i+1, rl.Source, rl.Destination, rl.Requests, rl.PerSecond)
-	}
-
-	// ---
+	proxy := proxy.NewProxy(config)
 
 	http.HandleFunc("/", proxy.ProxyHandler)
+
 	log.Println("Starting proxy on :8080")
+
+	// print config
+	for key, value := range config.RateLimits {
+		log.Printf("Rate limit for %s: %v\n", key, value)
+	}
+
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
