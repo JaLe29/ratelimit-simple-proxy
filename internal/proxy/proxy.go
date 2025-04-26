@@ -7,15 +7,25 @@ import (
 	"net/url"
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/storage"
 )
 
 type Proxy struct {
-	config *config.Config
+	config   *config.Config
+	limiters map[string]*storage.IPRateLimiter
 }
 
 func NewProxy(cfg *config.Config) *Proxy {
+	limiters := make(map[string]*storage.IPRateLimiter)
+
+	// Initialize limiters for all configured hosts
+	for host, target := range cfg.RateLimits {
+		limiters[host] = storage.NewIPRateLimiter(target.PerSecond, target.Requests)
+	}
+
 	return &Proxy{
-		config: cfg,
+		config:   cfg,
+		limiters: limiters,
 	}
 }
 
@@ -29,18 +39,29 @@ func (p *Proxy) getClientIp(r *http.Request) string {
 		}
 	}
 
+	if clientIp == "" {
+		return "empty"
+	}
+
 	return clientIp
 }
 
 func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
-
 	clientIp := p.getClientIp(r)
-
 	fmt.Println("Client IP:", clientIp)
 
 	target, ok := p.config.RateLimits[r.Host]
 	if !ok {
 		http.Error(w, "Host '"+r.Host+"' not found", http.StatusBadGateway)
+		return
+	}
+
+	// Get limiter for this host
+	limiter := p.limiters[r.Host]
+
+	// Check rate limit
+	if limiter.CheckLimit(clientIp) {
+		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
 
