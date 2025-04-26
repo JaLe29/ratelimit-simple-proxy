@@ -5,16 +5,14 @@ ipHeader:
     - RemoteAddr
 
 rateLimits:
-  localhost:8080:
+  "localhost:8080":
     destination: "https://kamdoautoskoly.cz"
     requests: 10
     perSecond: 60
-
-  users:
-    destination: "api/users"
+  dev-cods-admin.jale.cz:
+    destination: "http://dev-cods-admin.app:2000"
     requests: 50
     perSecond: 1
-
   admin:
     destination: "api/admin"
     requests: 1000
