@@ -52,7 +52,13 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	target, ok := p.config.RateLimits[r.Host]
 	if !ok {
-		http.Error(w, "Host '"+r.Host+"' not found", http.StatusBadGateway)
+		http.Error(w, "Host ("+r.Host+") not found", http.StatusBadGateway)
+		return
+	}
+
+	// has ip perma block
+	if target.IPPermaBlock[clientIp] {
+		http.Error(w, "Access denied. Your IP ("+clientIp+") is blocked.", http.StatusForbidden)
 		return
 	}
 

@@ -20,7 +20,6 @@ func main() {
 
 	log.Println("Starting proxy on :8080")
 
-	// print config
 	for key, value := range config.RateLimits {
 		log.Printf("Rate limit for %s: %v\n", key, value)
 	}

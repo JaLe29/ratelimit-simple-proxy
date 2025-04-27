@@ -7,32 +7,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// IPHeaderConfig představuje konfiguraci pro čtení IP adresy z headerů
-type IPHeaderConfig struct {
-	Headers []string `yaml:"headers"` // může být string nebo pole stringů
-}
-
-// RateLimitConfig definuje rate limity pro source->destination
-type RateLimitConfig struct {
-	Destination string `yaml:"destination"`
-	Requests    int    `yaml:"requests"`  // počet požadavků
-	PerSecond   int    `yaml:"perSecond"` // časové okno v sekundách
-}
-
-// Config reprezentuje celou konfiguraci aplikace
-type Config struct {
-	IPHeader   IPHeaderConfig             `yaml:"ipHeader"`
-	RateLimits map[string]RateLimitConfig `yaml:"rateLimits"`
-}
-
 // LoadConfig načte konfiguraci z YAML souboru
 func LoadConfig(configPath string) (*Config, error) {
 	// Výchozí konfigurace
-	config := &Config{
+	config := &config{
 		IPHeader: IPHeaderConfig{
 			Headers: []string{"X-Forwarded-For", "X-Real-IP"},
 		},
-		RateLimits: make(map[string]RateLimitConfig),
+		RateLimits: make(map[string]rateLimitConfig),
 	}
 
 	// Hledání konfiguračního souboru
@@ -91,5 +73,25 @@ func LoadConfig(configPath string) (*Config, error) {
 			k, rl.Destination, rl.Requests, rl.PerSecond)
 	}
 
-	return config, nil
+	// create global config with better structure
+
+	globalConfig := &Config{
+		IPHeader:   config.IPHeader,
+		RateLimits: make(map[string]RateLimitConfig),
+	}
+
+	for key, value := range config.RateLimits {
+		globalConfig.RateLimits[key] = RateLimitConfig{
+			Destination:  value.Destination,
+			Requests:     value.Requests,
+			PerSecond:    value.PerSecond,
+			IPPermaBlock: make(map[string]bool),
+		}
+
+		for _, ip := range value.IPPermaBlock {
+			globalConfig.RateLimits[key].IPPermaBlock[ip] = true
+		}
+	}
+
+	return globalConfig, nil
 }
