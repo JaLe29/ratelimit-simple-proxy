@@ -2,10 +2,10 @@ package config
 
 // Local types
 type rateLimitConfig struct {
-	Destination  string   `yaml:"destination"`
-	Requests     int      `yaml:"requests"`
-	PerSecond    int      `yaml:"perSecond"`
-	IPPermaBlock []string `yaml:"ipPermaBlock"`
+	Destination string   `yaml:"destination"`
+	Requests    int      `yaml:"requests"`
+	PerSecond   int      `yaml:"perSecond"`
+	ipBlackList []string `yaml:"ipBlackList"`
 }
 
 type config struct {
@@ -19,10 +19,10 @@ type IPHeaderConfig struct {
 }
 
 type RateLimitConfig struct {
-	Destination  string          `yaml:"destination"`
-	Requests     int             `yaml:"requests"`
-	PerSecond    int             `yaml:"perSecond"`
-	IPPermaBlock map[string]bool `yaml:"ipPermaBlock"`
+	Destination string          `yaml:"destination"`
+	Requests    int             `yaml:"requests"`
+	PerSecond   int             `yaml:"perSecond"`
+	IpBlackList map[string]bool `yaml:"ipBlackList"`
 }
 
 type Config struct {

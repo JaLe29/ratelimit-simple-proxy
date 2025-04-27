@@ -9,8 +9,8 @@ rateLimits:
     destination: "https://kamdoautoskoly.cz"
     requests: 1000
     perSecond: 60
-    ipPermaBlock:
-      - "empty"
+    ipBlackList:
+      - "1.1.1.1"
   dev-cods-admin.jale.cz:
     destination: "http://dev-cods-admin.app:2000"
     requests: 50

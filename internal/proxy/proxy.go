@@ -49,6 +49,7 @@ func (p *Proxy) getClientIp(r *http.Request) string {
 func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	clientIp := p.getClientIp(r)
 	fmt.Println("Client IP:", clientIp)
+	fmt.Println("URL:", r.URL.RequestURI())
 
 	target, ok := p.config.RateLimits[r.Host]
 	if !ok {
@@ -57,7 +58,7 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// has ip perma block
-	if target.IPPermaBlock[clientIp] {
+	if target.IpBlackList[clientIp] {
 		http.Error(w, "Access denied. Your IP ("+clientIp+") is blocked.", http.StatusForbidden)
 		return
 	}

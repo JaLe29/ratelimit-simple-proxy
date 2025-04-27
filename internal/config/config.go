@@ -82,14 +82,14 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	for key, value := range config.RateLimits {
 		globalConfig.RateLimits[key] = RateLimitConfig{
-			Destination:  value.Destination,
-			Requests:     value.Requests,
-			PerSecond:    value.PerSecond,
-			IPPermaBlock: make(map[string]bool),
+			Destination: value.Destination,
+			Requests:    value.Requests,
+			PerSecond:   value.PerSecond,
+			IpBlackList: make(map[string]bool),
 		}
 
-		for _, ip := range value.IPPermaBlock {
-			globalConfig.RateLimits[key].IPPermaBlock[ip] = true
+		for _, ip := range value.ipBlackList {
+			globalConfig.RateLimits[key].IpBlackList[ip] = true
 		}
 	}
 
