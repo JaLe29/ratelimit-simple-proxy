@@ -14,7 +14,8 @@ func LoadConfig(configPath string) (*Config, error) {
 		IPHeader: IPHeaderConfig{
 			Headers: []string{"X-Forwarded-For", "X-Real-IP"},
 		},
-		RateLimits: make(map[string]rateLimitConfig),
+		RateLimits:  make(map[string]rateLimitConfig),
+		IpBlackList: []string{},
 	}
 
 	// Hledání konfiguračního souboru
@@ -88,8 +89,15 @@ func LoadConfig(configPath string) (*Config, error) {
 			IpBlackList: make(map[string]bool),
 		}
 
-		for _, ip := range value.ipBlackList {
+		for _, ip := range value.IpBlackList {
 			globalConfig.RateLimits[key].IpBlackList[ip] = true
+		}
+	}
+
+	// copy global blacklist to all rate limits
+	for _, value := range globalConfig.RateLimits {
+		for _, valueBl := range config.IpBlackList {
+			value.IpBlackList[valueBl] = true
 		}
 	}
 

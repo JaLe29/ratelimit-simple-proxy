@@ -5,12 +5,13 @@ type rateLimitConfig struct {
 	Destination string   `yaml:"destination"`
 	Requests    int      `yaml:"requests"`
 	PerSecond   int      `yaml:"perSecond"`
-	ipBlackList []string `yaml:"ipBlackList"`
+	IpBlackList []string `yaml:"ipBlackList"`
 }
 
 type config struct {
-	IPHeader   IPHeaderConfig             `yaml:"ipHeader"`
-	RateLimits map[string]rateLimitConfig `yaml:"rateLimits"`
+	IPHeader    IPHeaderConfig             `yaml:"ipHeader"`
+	RateLimits  map[string]rateLimitConfig `yaml:"rateLimits"`
+	IpBlackList []string                   `yaml:"ipBlackList"`
 }
 
 // Global types

@@ -22,9 +22,12 @@ func NewIPRateLimiter(windowSeconds, maxRequests int) *IPRateLimiter {
 	}
 }
 
-// CheckLimit kontroluje, zda IP adresa nepřekročila limit
-// Vrací true, pokud je překročený limit, a false pokud je přístup povolen
 func (r *IPRateLimiter) CheckLimit(ipAddress string) bool {
+	if r.windowSecs == -1 && r.maxRequests == -1 {
+		// rate limit is disabled
+		return false
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

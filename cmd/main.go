@@ -16,6 +16,11 @@ func main() {
 
 	proxy := proxy.NewProxy(config)
 
+	http.HandleFunc("/rlsp/system/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
 	http.HandleFunc("/", proxy.ProxyHandler)
 
 	log.Println("Starting proxy on :8080")
@@ -25,4 +30,7 @@ func main() {
 	}
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
+
+	log.Fatal(http.ListenAndServe(":8080", nil))
+
 }
