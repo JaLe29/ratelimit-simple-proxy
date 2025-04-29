@@ -2,10 +2,7 @@
 package cache
 
 import (
-	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -59,7 +56,6 @@ func (c *MemoryCache) Get(key string) (*CacheItem, bool) {
 
 	// Pokud položka vypršela, ignorujeme ji
 	if item.IsExpired() {
-		fmt.Println("EXPIRED - cache key " + key)
 		return nil, false
 	}
 
@@ -165,25 +161,28 @@ func ShouldCache(r *http.Request, statusCode int) bool {
 
 // GetCacheDuration určí, jak dlouho má být odpověď cachována
 func GetCacheDuration(headers http.Header, defaultTtlSeconds int) time.Duration {
-	// Pokud máme Cache-Control, použijeme jeho hodnoty
-	if cacheControl := headers.Get("Cache-Control"); cacheControl != "" {
-		if strings.Contains(cacheControl, "no-store") || strings.Contains(cacheControl, "no-cache") {
-			return 0 // Nekachujeme
-		}
+	/*
+		// Pokud máme Cache-Control, použijeme jeho hodnoty
+		if cacheControl := headers.Get("Cache-Control"); cacheControl != "" {
+			if strings.Contains(cacheControl, "no-store") || strings.Contains(cacheControl, "no-cache") {
+				return 0 // Nekachujeme
+			}
 
-		if maxAge := strings.Split(cacheControl, "max-age="); len(maxAge) > 1 {
-			parts := strings.Split(maxAge[1], ",")
-			seconds := 0
-			if _, err := strconv.Atoi(parts[0]); err == nil {
-				seconds, _ = strconv.Atoi(parts[0])
-				if seconds > 0 {
-					return time.Duration(seconds) * time.Second
+			if maxAge := strings.Split(cacheControl, "max-age="); len(maxAge) > 1 {
+				parts := strings.Split(maxAge[1], ",")
+				seconds := 0
+				if _, err := strconv.Atoi(parts[0]); err == nil {
+					seconds, _ = strconv.Atoi(parts[0])
+					if seconds > 0 {
+						return time.Duration(seconds) * time.Second
+					}
 				}
 			}
 		}
-	}
+	*/
 
 	// Defaultní doba cachování
 	// return 60 * time.Second
-	return time.Duration(defaultTtlSeconds) * time.Second
+	var tmp = time.Duration(defaultTtlSeconds) * time.Second
+	return tmp
 }
