@@ -12,6 +12,7 @@ rateLimits:
     # black list for domain
     ipBlackList:
       - "1.1.1.1"
+    cacheMaxTtlSeconds: 3600
   dev-cods-admin.jale.cz:
     destination: "http://dev-cods-admin.app:2000"
     requests: 50

@@ -70,13 +70,17 @@ func LoadConfig(configPath string) (*Config, error) {
 			return nil, fmt.Errorf("u rate limitu '%s' je neplatný počet requestů a perSecond: %d, %d", key, rl.Requests, rl.PerSecond)
 		}
 
+		if rl.CacheMaxTtlSeconds < 0 {
+			return nil, fmt.Errorf("u rate limitu '%s' je neplatná hodnota cacheMaxTtlSeconds: %d", key, rl.CacheMaxTtlSeconds)
+		}
+
 	}
 
 	// Debug výpis
 	fmt.Println("Načtené rate limity:")
 	for k, rl := range config.RateLimits {
-		fmt.Printf("Klíč: %s, Destination: %s, Requests: %d, PerSecond: %d\n",
-			k, rl.Destination, rl.Requests, rl.PerSecond)
+		fmt.Printf("Klíč: %s, Destination: %s, Requests: %d, PerSecond: %d, CacheMaxTtlSeconds: %d\n",
+			k, rl.Destination, rl.Requests, rl.PerSecond, rl.CacheMaxTtlSeconds)
 	}
 
 	// create global config with better structure
@@ -88,10 +92,11 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	for key, value := range config.RateLimits {
 		globalConfig.RateLimits[key] = RateLimitConfig{
-			Destination: value.Destination,
-			Requests:    value.Requests,
-			PerSecond:   value.PerSecond,
-			IpBlackList: make(map[string]bool),
+			Destination:        value.Destination,
+			Requests:           value.Requests,
+			PerSecond:          value.PerSecond,
+			IpBlackList:        make(map[string]bool),
+			CacheMaxTtlSeconds: value.CacheMaxTtlSeconds,
 		}
 
 		for _, ip := range value.IpBlackList {

@@ -1,11 +1,14 @@
 package proxy
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/cache"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/storage"
 )
@@ -13,6 +16,7 @@ import (
 type Proxy struct {
 	config   *config.Config
 	limiters map[string]storage.Storage
+	cache    *cache.MemoryCache
 }
 
 func NewProxy(cfg *config.Config) *Proxy {
@@ -32,9 +36,13 @@ func NewProxy(cfg *config.Config) *Proxy {
 		limiters[host] = store
 	}
 
+	// Inicializace cache s kapacitou 1000 položek
+	memCache := cache.NewMemoryCache(1000)
+
 	return &Proxy{
 		config:   cfg,
 		limiters: limiters,
+		cache:    memCache,
 	}
 }
 
@@ -72,6 +80,8 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hasCache := target.CacheMaxTtlSeconds > 0
+
 	// Get limiter for this host
 	limiter := p.limiters[r.Host]
 
@@ -81,31 +91,117 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	shouldCache := hasCache && r.Method == http.MethodGet
+	// Zkontrolujeme, zda můžeme použít cache
+	// Cache použijeme pouze pro GET requesty
+	if shouldCache {
+		cacheKey := cache.GetCacheKey(r)
+		if item, found := p.cache.Get(cacheKey); found {
+			// Máme cache hit, vrátíme přímo z cache
+			for key, values := range item.Headers {
+				for _, value := range values {
+					w.Header().Add(key, value)
+				}
+			}
+			w.Header().Set("X-Cache", "HIT")
+			w.WriteHeader(item.ResponseCode)
+			w.Write(item.Response)
+			return
+		}
+		w.Header().Set("X-Cache", "MISS")
+	}
+
+	// Pokračujeme standardním zpracováním proxy
 	targetURL, err := url.Parse(target.Destination)
 	if err != nil {
 		http.Error(w, "Invalid target URL", http.StatusInternalServerError)
 		return
 	}
 
-	// Vytvoření reverse proxy
-	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	if shouldCache {
+		// Místo přímého volání proxy vytvoříme custom transport a zachytíme odpověď
+		proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
-	// Přepsání původních hlaviček
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-
-		// Přidání důležitých hlaviček pro CORS
-		if origin := r.Header.Get("Origin"); origin != "" {
-			req.Header.Set("Origin", origin)
+		// Upravíme Director funkci jako předtím
+		originalDirector := proxy.Director
+		proxy.Director = func(req *http.Request) {
+			originalDirector(req)
+			if origin := r.Header.Get("Origin"); origin != "" {
+				req.Header.Set("Origin", origin)
+			}
+			req.Header.Set("X-Forwarded-Host", r.Host)
+			req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
+			req.Header.Add("X-Forwarded-For", clientIp)
 		}
 
-		// Další potřebné hlavičky pro proxy
-		req.Header.Set("X-Forwarded-Host", r.Host)
-		req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
-		req.Header.Add("X-Forwarded-For", clientIp)
-	}
+		// Zachytíme odpověď modifikací transportu
+		originalTransport := proxy.Transport
+		if originalTransport == nil {
+			originalTransport = http.DefaultTransport
+		}
 
-	// Přesměrování požadavku
-	proxy.ServeHTTP(w, r)
+		proxy.Transport = &cachingTransport{
+			transport: originalTransport,
+			callback: func(resp *http.Response, err error) {
+				if err != nil || !cache.ShouldCache(r, resp.StatusCode) {
+					return
+				}
+
+				// Kopírujeme tělo odpovědi
+				respBody, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return
+				}
+
+				// Znovu nastavíme tělo pro další čtení
+				resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
+
+				// Určíme dobu cachování
+				expiry := cache.GetCacheDuration(resp.Header, target.CacheMaxTtlSeconds)
+				if expiry > 0 {
+					// Kopírujeme hlavičky
+					headersCopy := http.Header{}
+					for k, v := range resp.Header {
+						headersCopy[k] = v
+					}
+
+					// Ukládáme do cache
+					cacheKey := cache.GetCacheKey(r)
+					p.cache.Set(cacheKey, respBody, resp.StatusCode, headersCopy, expiry)
+				}
+			},
+		}
+
+		proxy.ServeHTTP(w, r)
+	} else {
+		// Pro non-GET metody pokračujeme bez cache
+		proxy := httputil.NewSingleHostReverseProxy(targetURL)
+
+		originalDirector := proxy.Director
+		proxy.Director = func(req *http.Request) {
+			originalDirector(req)
+			if origin := r.Header.Get("Origin"); origin != "" {
+				req.Header.Set("Origin", origin)
+			}
+			req.Header.Set("X-Forwarded-Host", r.Host)
+			req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
+			req.Header.Add("X-Forwarded-For", clientIp)
+		}
+
+		proxy.ServeHTTP(w, r)
+	}
+}
+
+// cachingTransport je custom HTTP transport pro zachycení odpovědi
+type cachingTransport struct {
+	transport http.RoundTripper
+	callback  func(*http.Response, error)
+}
+
+func (t *cachingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := t.transport.RoundTrip(request)
+	if response != nil && t.callback != nil {
+		t.callback(response, err)
+	}
+	return response, err
 }
