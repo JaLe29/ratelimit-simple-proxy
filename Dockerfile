@@ -8,7 +8,7 @@ COPY ./go.sum								./go.sum
 COPY ./internal								./internal
 COPY ./cmd									./cmd
 
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o build/main /app/cmd/main.go
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o build/main /app/cmd/app/main.go
 
 # Production image
 FROM gcr.io/distroless/static

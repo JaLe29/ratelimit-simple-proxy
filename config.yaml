@@ -6,7 +6,7 @@ ipHeader:
 
 rateLimits:
   "localhost:8080":
-    destination: "https://mocki.io/v1/88cdd6dd-2b6f-448b-a724-9abf284e3ea4"
+    destination: "http://localhost:8881"
     requests: -1
     perSecond: -1
     # black list for domain
