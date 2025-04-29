@@ -23,11 +23,6 @@ func NewIPRateLimiter(windowSeconds, maxRequests int) *IPRateLimiter {
 }
 
 func (r *IPRateLimiter) CheckLimit(ipAddress string) bool {
-	if r.windowSecs == -1 && r.maxRequests == -1 {
-		// rate limit is disabled
-		return false
-	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -57,11 +52,4 @@ func (r *IPRateLimiter) CheckLimit(ipAddress string) bool {
 
 	// Překročil limit?
 	return len(recentAccesses) > r.maxRequests
-}
-
-// Nepovinná metoda pro ruční vyčištění všech záznamů (může být užitečná pro testování nebo reset)
-func (r *IPRateLimiter) ClearAll() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.accessMap = make(map[string][]time.Time)
 }
