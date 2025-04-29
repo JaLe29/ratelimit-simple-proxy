@@ -2,6 +2,7 @@
 package cache
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -58,6 +59,7 @@ func (c *MemoryCache) Get(key string) (*CacheItem, bool) {
 
 	// Pokud položka vypršela, ignorujeme ji
 	if item.IsExpired() {
+		fmt.Println("EXPIRED - cache key " + key)
 		return nil, false
 	}
 
