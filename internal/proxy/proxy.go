@@ -94,6 +94,8 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println("Response Status:", resp.Status)
+
 	defer resp.Body.Close()
 
 	for k, vv := range resp.Header {
