@@ -12,15 +12,24 @@ import (
 
 type Proxy struct {
 	config   *config.Config
-	limiters map[string]*storage.IPRateLimiter
+	limiters map[string]storage.Storage
 }
 
 func NewProxy(cfg *config.Config) *Proxy {
-	limiters := make(map[string]*storage.IPRateLimiter)
+	limiters := make(map[string]storage.Storage)
 
 	// Initialize limiters for all configured hosts
 	for host, target := range cfg.RateLimits {
-		limiters[host] = storage.NewIPRateLimiter(target.PerSecond, target.Requests)
+		if target.PerSecond == -1 && target.Requests == -1 {
+			store := storage.NewFakeStorage()
+			limiters[host] = store
+			fmt.Println("Host:", host, "is using fake storage")
+			continue
+		}
+
+		var store storage.Storage = storage.NewIPRateLimiter(target.PerSecond, target.Requests)
+		fmt.Println("Host:", host, "is using ip rate limiter")
+		limiters[host] = store
 	}
 
 	return &Proxy{
