@@ -20,7 +20,15 @@ func NewProxy(cfg *config.Config) *Proxy {
 
 	// Initialize limiters for all configured hosts
 	for host, target := range cfg.RateLimits {
+		if target.PerSecond == -1 && target.Requests == -1 {
+			store := storage.NewFakeStorage()
+			limiters[host] = store
+			fmt.Println("Host:", host, "is using fake storage")
+			continue
+		}
+
 		var store storage.Storage = storage.NewIPRateLimiter(target.PerSecond, target.Requests)
+		fmt.Println("Host:", host, "is using ip rate limiter")
 		limiters[host] = store
 	}
 

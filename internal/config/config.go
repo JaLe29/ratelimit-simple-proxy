@@ -59,12 +59,17 @@ func LoadConfig(configPath string) (*Config, error) {
 		if rl.Destination == "" {
 			return nil, fmt.Errorf("u rate limitu '%s' chybí destination", key)
 		}
-		if rl.Requests <= 0 {
+		if rl.Requests < -1 {
 			return nil, fmt.Errorf("u rate limitu '%s' je neplatný počet requestů: %d", key, rl.Requests)
 		}
-		if rl.PerSecond <= 0 {
+		if rl.PerSecond < -1 {
 			return nil, fmt.Errorf("u rate limitu '%s' je neplatná hodnota perSecond: %d", key, rl.PerSecond)
 		}
+
+		if rl.Requests == -1 && rl.PerSecond != -1 || rl.Requests != -1 && rl.PerSecond == -1 {
+			return nil, fmt.Errorf("u rate limitu '%s' je neplatný počet requestů a perSecond: %d, %d", key, rl.Requests, rl.PerSecond)
+		}
+
 	}
 
 	// Debug výpis
