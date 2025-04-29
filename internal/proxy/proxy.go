@@ -97,27 +97,6 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		req.Header.Add("X-Forwarded-For", clientIp)
 	}
 
-	// Modifikace odpovědi pro CORS
-	proxy.ModifyResponse = func(resp *http.Response) error {
-		if origin := r.Header.Get("Origin"); origin != "" {
-			resp.Header.Set("Access-Control-Allow-Origin", origin)
-			resp.Header.Set("Access-Control-Allow-Credentials", "true")
-			resp.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			resp.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Grafana-Org-Id")
-		}
-		return nil
-	}
-
-	// Obsluha OPTIONS requests pro CORS preflight
-	if r.Method == "OPTIONS" {
-		w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Grafana-Org-Id")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
 	// Přesměrování požadavku
 	proxy.ServeHTTP(w, r)
 }
