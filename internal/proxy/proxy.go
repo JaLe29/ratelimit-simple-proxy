@@ -2,8 +2,8 @@ package proxy
 
 import (
 	"fmt"
-	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
@@ -78,33 +78,46 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxyReq, err := http.NewRequest(r.Method, targetURL.String()+r.URL.RequestURI(), r.Body)
-	if err != nil {
-		http.Error(w, "Failed to create request", http.StatusInternalServerError)
-		return
-	}
+	// Vytvoření reverse proxy
+	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
-	proxyReq.Header = r.Header.Clone()
-	proxyReq.Host = targetURL.Host
+	// Přepsání původních hlaviček
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
 
-	client := &http.Client{}
-	resp, err := client.Do(proxyReq)
-
-	if err != nil {
-		http.Error(w, "Request failed", http.StatusBadGateway)
-		return
-	}
-
-	fmt.Println("Response Status:", resp.Status)
-
-	defer resp.Body.Close()
-
-	for k, vv := range resp.Header {
-		for _, v := range vv {
-			w.Header().Add(k, v)
+		// Přidání důležitých hlaviček pro CORS
+		if origin := r.Header.Get("Origin"); origin != "" {
+			req.Header.Set("Origin", origin)
 		}
+
+		// Další potřebné hlavičky pro proxy
+		req.Header.Set("X-Forwarded-Host", r.Host)
+		req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
+		req.Header.Add("X-Forwarded-For", clientIp)
 	}
 
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	// Modifikace odpovědi pro CORS
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		if origin := r.Header.Get("Origin"); origin != "" {
+			resp.Header.Set("Access-Control-Allow-Origin", origin)
+			resp.Header.Set("Access-Control-Allow-Credentials", "true")
+			resp.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			resp.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Grafana-Org-Id")
+		}
+		return nil
+	}
+
+	// Obsluha OPTIONS requests pro CORS preflight
+	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Grafana-Org-Id")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Přesměrování požadavku
+	proxy.ServeHTTP(w, r)
 }
