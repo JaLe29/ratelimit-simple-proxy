@@ -91,6 +91,10 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	xxx := cache.GetCacheKey(r)
+	fmt.Println("has cache", hasCache)
+	fmt.Println("cache key", xxx)
+
 	shouldCache := hasCache && r.Method == http.MethodGet
 	// Zkontrolujeme, zda můžeme použít cache
 	// Cache použijeme pouze pro GET requesty
