@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/cache"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
@@ -92,8 +93,7 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	xxx := cache.GetCacheKey(r)
-	fmt.Println("has cache", hasCache)
-	fmt.Println("cache key", xxx)
+	fmt.Println("has cache" + strconv.FormatBool(hasCache) + ", cache key " + xxx)
 
 	shouldCache := hasCache && r.Method == http.MethodGet
 	// Zkontrolujeme, zda můžeme použít cache
@@ -101,18 +101,21 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	if shouldCache {
 		cacheKey := cache.GetCacheKey(r)
 		if item, found := p.cache.Get(cacheKey); found {
+			fmt.Println("HIT - has cache" + strconv.FormatBool(hasCache) + ", cache key " + xxx)
 			// Máme cache hit, vrátíme přímo z cache
 			for key, values := range item.Headers {
 				for _, value := range values {
 					w.Header().Add(key, value)
 				}
 			}
-			w.Header().Set("X-Cache", "HIT")
+			w.Header().Set("X-RLSP-Cache", "HIT")
 			w.WriteHeader(item.ResponseCode)
 			w.Write(item.Response)
 			return
+		} else {
+			fmt.Println("MISS - has cache" + strconv.FormatBool(hasCache) + ", cache key " + xxx)
 		}
-		w.Header().Set("X-Cache", "MISS")
+		w.Header().Set("X-RLSP-Cache", "MISS")
 	}
 
 	// Pokračujeme standardním zpracováním proxy
