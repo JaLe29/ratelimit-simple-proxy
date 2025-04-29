@@ -85,6 +85,7 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxyReq.Header = r.Header.Clone()
+	proxyReq.Host = targetURL.Host
 
 	client := &http.Client{}
 	resp, err := client.Do(proxyReq)
