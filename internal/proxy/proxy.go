@@ -11,6 +11,7 @@ import (
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/cache"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/metric"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/storage"
 )
 
@@ -18,9 +19,10 @@ type Proxy struct {
 	config   *config.Config
 	limiters map[string]storage.Storage
 	cache    *cache.MemoryCache
+	metric   *metric.Metric
 }
 
-func NewProxy(cfg *config.Config) *Proxy {
+func NewProxy(cfg *config.Config, metric *metric.Metric) *Proxy {
 	limiters := make(map[string]storage.Storage)
 
 	// Initialize limiters for all configured hosts
@@ -44,6 +46,7 @@ func NewProxy(cfg *config.Config) *Proxy {
 		config:   cfg,
 		limiters: limiters,
 		cache:    memCache,
+		metric:   metric,
 	}
 }
 
@@ -124,6 +127,8 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid target URL", http.StatusInternalServerError)
 		return
 	}
+
+	p.metric.RequestsTotal.WithLabelValues(r.Host).Inc()
 
 	if shouldCache {
 		// Místo přímého volání proxy vytvoříme custom transport a zachytíme odpověď
