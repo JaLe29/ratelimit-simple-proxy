@@ -9,9 +9,11 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/auth"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/cache"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/metric"
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/middleware"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/storage"
 )
 
@@ -20,26 +22,37 @@ type Proxy struct {
 	limiters map[string]storage.Storage
 	cache    *cache.MemoryCache
 	metric   *metric.Metric
+	auth     map[string]*auth.GoogleAuthenticator
 }
 
 func NewProxy(cfg *config.Config, metric *metric.Metric) *Proxy {
 	limiters := make(map[string]storage.Storage)
+	authenticators := make(map[string]*auth.GoogleAuthenticator)
 
-	// Initialize limiters for all configured hosts
+	// Initialize limiters and authenticators for all configured hosts
 	for host, target := range cfg.RateLimits {
 		if target.PerSecond == -1 && target.Requests == -1 {
 			store := storage.NewFakeStorage()
 			limiters[host] = store
 			fmt.Println("Host:", host, "is using fake storage")
-			continue
+		} else {
+			var store storage.Storage = storage.NewIPRateLimiter(target.PerSecond, target.Requests)
+			fmt.Println("Host:", host, "is using ip rate limiter")
+			limiters[host] = store
 		}
 
-		var store storage.Storage = storage.NewIPRateLimiter(target.PerSecond, target.Requests)
-		fmt.Println("Host:", host, "is using ip rate limiter")
-		limiters[host] = store
+		// Initialize Google authenticator if enabled
+		if target.GoogleAuth != nil && target.GoogleAuth.Enabled {
+			authenticators[host] = auth.NewGoogleAuthenticator(
+				target.GoogleAuth.ClientID,
+				target.GoogleAuth.ClientSecret,
+				target.GoogleAuth.RedirectURL,
+			)
+			fmt.Println("Host:", host, "has Google authentication enabled")
+		}
 	}
 
-	// Inicializace cache s kapacitou 1000 položek
+	// Initialize cache with capacity of 1000 items
 	memCache := cache.NewMemoryCache(1000)
 
 	return &Proxy{
@@ -47,6 +60,7 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) *Proxy {
 		limiters: limiters,
 		cache:    memCache,
 		metric:   metric,
+		auth:     authenticators,
 	}
 }
 
@@ -78,133 +92,114 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// has ip perma block
-	if target.IpBlackList[clientIp] {
-		http.Error(w, "Access denied. Your IP ("+clientIp+") is blocked.", http.StatusForbidden)
-		return
-	}
+	// Create middleware chain
+	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// This is the final handler that will be called if all middleware passes
+		hasCache := target.CacheMaxTtlSeconds > 0
+		shouldCache := hasCache && r.Method == http.MethodGet
 
-	hasCache := target.CacheMaxTtlSeconds > 0
-
-	// Get limiter for this host
-	limiter := p.limiters[r.Host]
-
-	// Check rate limit
-	if limiter.CheckLimit(clientIp) {
-		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
-		return
-	}
-
-	xxx := cache.GetCacheKey(r)
-	fmt.Println("has cache" + strconv.FormatBool(hasCache) + ", cache key " + xxx)
-
-	shouldCache := hasCache && r.Method == http.MethodGet
-	// Zkontrolujeme, zda můžeme použít cache
-	// Cache použijeme pouze pro GET requesty
-	if shouldCache {
-		cacheKey := cache.GetCacheKey(r)
-		if item, found := p.cache.Get(cacheKey); found {
-			fmt.Println("HIT - has cache" + strconv.FormatBool(hasCache) + ", cache key " + xxx)
-			// Máme cache hit, vrátíme přímo z cache
-			for key, values := range item.Headers {
-				for _, value := range values {
-					w.Header().Add(key, value)
+		if shouldCache {
+			cacheKey := cache.GetCacheKey(r)
+			if item, found := p.cache.Get(cacheKey); found {
+				fmt.Println("HIT - has cache" + strconv.FormatBool(hasCache) + ", cache key " + cacheKey)
+				for key, values := range item.Headers {
+					for _, value := range values {
+						w.Header().Add(key, value)
+					}
 				}
+				w.Header().Set("X-RLSP-Cache", "HIT")
+				w.WriteHeader(item.ResponseCode)
+				w.Write(item.Response)
+				return
 			}
-			w.Header().Set("X-RLSP-Cache", "HIT")
-			w.WriteHeader(item.ResponseCode)
-			w.Write(item.Response)
+			fmt.Println("MISS - has cache" + strconv.FormatBool(hasCache) + ", cache key " + cacheKey)
+			w.Header().Set("X-RLSP-Cache", "MISS")
+		}
+
+		targetURL, err := url.Parse(target.Destination)
+		if err != nil {
+			http.Error(w, "Invalid target URL", http.StatusInternalServerError)
 			return
-		} else {
-			fmt.Println("MISS - has cache" + strconv.FormatBool(hasCache) + ", cache key " + xxx)
 		}
-		w.Header().Set("X-RLSP-Cache", "MISS")
-	}
 
-	// Pokračujeme standardním zpracováním proxy
-	targetURL, err := url.Parse(target.Destination)
-	if err != nil {
-		http.Error(w, "Invalid target URL", http.StatusInternalServerError)
-		return
-	}
+		p.metric.RequestsTotal.WithLabelValues(r.Host).Inc()
 
-	p.metric.RequestsTotal.WithLabelValues(r.Host).Inc()
-
-	if shouldCache {
-		// Místo přímého volání proxy vytvoříme custom transport a zachytíme odpověď
-		proxy := httputil.NewSingleHostReverseProxy(targetURL)
-
-		// Upravíme Director funkci jako předtím
-		originalDirector := proxy.Director
-		proxy.Director = func(req *http.Request) {
-			originalDirector(req)
-			if origin := r.Header.Get("Origin"); origin != "" {
-				req.Header.Set("Origin", origin)
+		if shouldCache {
+			proxy := httputil.NewSingleHostReverseProxy(targetURL)
+			originalDirector := proxy.Director
+			proxy.Director = func(req *http.Request) {
+				originalDirector(req)
+				if origin := r.Header.Get("Origin"); origin != "" {
+					req.Header.Set("Origin", origin)
+				}
+				req.Header.Set("X-Forwarded-Host", r.Host)
+				req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
+				req.Header.Add("X-Forwarded-For", clientIp)
 			}
-			req.Header.Set("X-Forwarded-Host", r.Host)
-			req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
-			req.Header.Add("X-Forwarded-For", clientIp)
-		}
 
-		// Zachytíme odpověď modifikací transportu
-		originalTransport := proxy.Transport
-		if originalTransport == nil {
-			originalTransport = http.DefaultTransport
-		}
+			originalTransport := proxy.Transport
+			if originalTransport == nil {
+				originalTransport = http.DefaultTransport
+			}
 
-		proxy.Transport = &cachingTransport{
-			transport: originalTransport,
-			callback: func(resp *http.Response, err error) {
-				if err != nil || !cache.ShouldCache(r, resp.StatusCode) {
-					return
-				}
-
-				// Kopírujeme tělo odpovědi
-				respBody, err := io.ReadAll(resp.Body)
-				if err != nil {
-					return
-				}
-
-				// Znovu nastavíme tělo pro další čtení
-				resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
-
-				// Určíme dobu cachování
-				expiry := cache.GetCacheDuration(resp.Header, target.CacheMaxTtlSeconds)
-				if expiry > 0 {
-					// Kopírujeme hlavičky
-					headersCopy := http.Header{}
-					for k, v := range resp.Header {
-						headersCopy[k] = v
+			proxy.Transport = &cachingTransport{
+				transport: originalTransport,
+				callback: func(resp *http.Response, err error) {
+					if err != nil || !cache.ShouldCache(r, resp.StatusCode) {
+						return
 					}
 
-					// Ukládáme do cache
-					cacheKey := cache.GetCacheKey(r)
-					p.cache.Set(cacheKey, respBody, resp.StatusCode, headersCopy, expiry)
-				}
-			},
-		}
+					respBody, err := io.ReadAll(resp.Body)
+					if err != nil {
+						return
+					}
 
-		proxy.ServeHTTP(w, r)
-	} else {
-		// Pro non-GET metody pokračujeme bez cache
-		proxy := httputil.NewSingleHostReverseProxy(targetURL)
+					resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
 
-		originalDirector := proxy.Director
-		proxy.Director = func(req *http.Request) {
-			originalDirector(req)
-			if origin := r.Header.Get("Origin"); origin != "" {
-				req.Header.Set("Origin", origin)
+					expiry := cache.GetCacheDuration(resp.Header, target.CacheMaxTtlSeconds)
+					if expiry > 0 {
+						headersCopy := http.Header{}
+						for k, v := range resp.Header {
+							headersCopy[k] = v
+						}
+
+						cacheKey := cache.GetCacheKey(r)
+						p.cache.Set(cacheKey, respBody, resp.StatusCode, headersCopy, expiry)
+					}
+				},
 			}
-			req.Header.Set("X-Forwarded-Host", r.Host)
-			req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
-			req.Header.Add("X-Forwarded-For", clientIp)
-		}
 
-		proxy.ServeHTTP(w, r)
+			proxy.ServeHTTP(w, r)
+		} else {
+			proxy := httputil.NewSingleHostReverseProxy(targetURL)
+			originalDirector := proxy.Director
+			proxy.Director = func(req *http.Request) {
+				originalDirector(req)
+				if origin := r.Header.Get("Origin"); origin != "" {
+					req.Header.Set("Origin", origin)
+				}
+				req.Header.Set("X-Forwarded-Host", r.Host)
+				req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
+				req.Header.Add("X-Forwarded-For", clientIp)
+			}
+
+			proxy.ServeHTTP(w, r)
+		}
+	})
+
+	// Add rate limiting middleware
+	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[r.Host], r.Host, p.getClientIp).Handle(handler)
+
+	// Add authentication middleware if enabled
+	if target.GoogleAuth != nil && target.GoogleAuth.Enabled {
+		handler = middleware.NewAuthMiddleware(p.config, p.auth[r.Host], r.Host).Handle(handler)
 	}
+
+	// Execute the middleware chain
+	handler.ServeHTTP(w, r)
 }
 
-// cachingTransport je custom HTTP transport pro zachycení odpovědi
+// cachingTransport is a custom HTTP transport for caching responses
 type cachingTransport struct {
 	transport http.RoundTripper
 	callback  func(*http.Response, error)

@@ -74,6 +74,21 @@ func LoadConfig(configPath string) (*Config, error) {
 			return nil, fmt.Errorf("u rate limitu '%s' je neplatná hodnota cacheMaxTtlSeconds: %d", key, rl.CacheMaxTtlSeconds)
 		}
 
+		// Validace Google Auth
+		if rl.GoogleAuth != nil && rl.GoogleAuth.Enabled {
+			if rl.GoogleAuth.ClientID == "" {
+				return nil, fmt.Errorf("u rate limitu '%s' je povoleno Google Auth, ale chybí clientId", key)
+			}
+			if rl.GoogleAuth.ClientSecret == "" {
+				return nil, fmt.Errorf("u rate limitu '%s' je povoleno Google Auth, ale chybí clientSecret", key)
+			}
+			if rl.GoogleAuth.RedirectURL == "" {
+				return nil, fmt.Errorf("u rate limitu '%s' je povoleno Google Auth, ale chybí redirectUrl", key)
+			}
+			if len(rl.GoogleAuth.AllowedEmails) == 0 {
+				return nil, fmt.Errorf("u rate limitu '%s' je povoleno Google Auth, ale chybí seznam povolených emailů (allowedEmails)", key)
+			}
+		}
 	}
 
 	// Debug výpis
@@ -81,6 +96,13 @@ func LoadConfig(configPath string) (*Config, error) {
 	for k, rl := range config.RateLimits {
 		fmt.Printf("Klíč: %s, Destination: %s, Requests: %d, PerSecond: %d, CacheMaxTtlSeconds: %d\n",
 			k, rl.Destination, rl.Requests, rl.PerSecond, rl.CacheMaxTtlSeconds)
+		if rl.GoogleAuth != nil {
+			fmt.Printf("  Google Auth: enabled=%v, clientId=%s, redirectUrl=%s\n",
+				rl.GoogleAuth.Enabled, rl.GoogleAuth.ClientID, rl.GoogleAuth.RedirectURL)
+			if len(rl.GoogleAuth.AllowedEmails) > 0 {
+				fmt.Printf("  Allowed Emails: %v\n", rl.GoogleAuth.AllowedEmails)
+			}
+		}
 	}
 
 	// create global config with better structure
@@ -97,6 +119,7 @@ func LoadConfig(configPath string) (*Config, error) {
 			PerSecond:          value.PerSecond,
 			IpBlackList:        make(map[string]bool),
 			CacheMaxTtlSeconds: value.CacheMaxTtlSeconds,
+			GoogleAuth:         value.GoogleAuth,
 		}
 
 		for _, ip := range value.IpBlackList {

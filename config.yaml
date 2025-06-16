@@ -13,6 +13,13 @@ rateLimits:
     ipBlackList:
       - "1.1.1.1"
     cacheMaxTtlSeconds: 3600
+    googleAuth:
+      enabled: true
+      clientId: "xxxxx"
+      clientSecret: "GOCSPX-xxxxx"
+      redirectUrl: "http://localhost:8080/auth/callback"
+      allowedEmails:
+        - "jakubloffelmann@gmail.com"
   dev-cods-admin.jale.cz:
     destination: "http://dev-cods-admin.app:2000"
     requests: 50
