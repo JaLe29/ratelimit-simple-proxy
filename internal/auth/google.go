@@ -72,7 +72,7 @@ func (ga *GoogleAuthenticator) SetAuthCookie(w http.ResponseWriter, userInfo *Go
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteNoneMode,
 		Expires:  time.Now().Add(24 * time.Hour),
 	})
 }

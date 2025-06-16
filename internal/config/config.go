@@ -54,7 +54,19 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("není definován žádný header pro IP")
 	}
 
-	// Validace rate limitů v mapě
+	// Validace Google Auth
+	if config.GoogleAuth != nil && config.GoogleAuth.Enabled {
+		if config.GoogleAuth.ClientID == "" {
+			return nil, fmt.Errorf("Google Auth je povoleno, ale chybí clientId")
+		}
+		if config.GoogleAuth.ClientSecret == "" {
+			return nil, fmt.Errorf("Google Auth je povoleno, ale chybí clientSecret")
+		}
+		if config.GoogleAuth.RedirectURL == "" {
+			return nil, fmt.Errorf("Google Auth je povoleno, ale chybí redirectUrl")
+		}
+	}
+
 	for key, rl := range config.RateLimits {
 		if rl.Destination == "" {
 			return nil, fmt.Errorf("u rate limitu '%s' chybí destination", key)
@@ -74,18 +86,9 @@ func LoadConfig(configPath string) (*Config, error) {
 			return nil, fmt.Errorf("u rate limitu '%s' je neplatná hodnota cacheMaxTtlSeconds: %d", key, rl.CacheMaxTtlSeconds)
 		}
 
-		// Validace Google Auth
-		if rl.GoogleAuth != nil && rl.GoogleAuth.Enabled {
-			if rl.GoogleAuth.ClientID == "" {
-				return nil, fmt.Errorf("u rate limitu '%s' je povoleno Google Auth, ale chybí clientId", key)
-			}
-			if rl.GoogleAuth.ClientSecret == "" {
-				return nil, fmt.Errorf("u rate limitu '%s' je povoleno Google Auth, ale chybí clientSecret", key)
-			}
-			if rl.GoogleAuth.RedirectURL == "" {
-				return nil, fmt.Errorf("u rate limitu '%s' je povoleno Google Auth, ale chybí redirectUrl", key)
-			}
-			if len(rl.GoogleAuth.AllowedEmails) == 0 {
+		// Validace allowedEmails pro Google Auth
+		if config.GoogleAuth != nil && config.GoogleAuth.Enabled && len(rl.AllowedEmails) > 0 {
+			if len(rl.AllowedEmails) == 0 {
 				return nil, fmt.Errorf("u rate limitu '%s' je povoleno Google Auth, ale chybí seznam povolených emailů (allowedEmails)", key)
 			}
 		}
@@ -96,19 +99,15 @@ func LoadConfig(configPath string) (*Config, error) {
 	for k, rl := range config.RateLimits {
 		fmt.Printf("Klíč: %s, Destination: %s, Requests: %d, PerSecond: %d, CacheMaxTtlSeconds: %d\n",
 			k, rl.Destination, rl.Requests, rl.PerSecond, rl.CacheMaxTtlSeconds)
-		if rl.GoogleAuth != nil {
-			fmt.Printf("  Google Auth: enabled=%v, clientId=%s, redirectUrl=%s\n",
-				rl.GoogleAuth.Enabled, rl.GoogleAuth.ClientID, rl.GoogleAuth.RedirectURL)
-			if len(rl.GoogleAuth.AllowedEmails) > 0 {
-				fmt.Printf("  Allowed Emails: %v\n", rl.GoogleAuth.AllowedEmails)
-			}
+		if len(rl.AllowedEmails) > 0 {
+			fmt.Printf("  Allowed Emails: %v\n", rl.AllowedEmails)
 		}
 	}
 
 	// create global config with better structure
-
 	globalConfig := &Config{
 		IPHeader:   config.IPHeader,
+		GoogleAuth: config.GoogleAuth,
 		RateLimits: make(map[string]RateLimitConfig),
 	}
 
@@ -119,7 +118,7 @@ func LoadConfig(configPath string) (*Config, error) {
 			PerSecond:          value.PerSecond,
 			IpBlackList:        make(map[string]bool),
 			CacheMaxTtlSeconds: value.CacheMaxTtlSeconds,
-			GoogleAuth:         value.GoogleAuth,
+			AllowedEmails:      value.AllowedEmails,
 		}
 
 		for _, ip := range value.IpBlackList {

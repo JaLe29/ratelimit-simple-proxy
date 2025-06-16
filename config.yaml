@@ -4,6 +4,18 @@ ipHeader:
     - X-Real-IP
     - RemoteAddr
 
+# Global Google Auth configuration
+googleAuth:
+  enabled: true
+  clientId: "xxxxx"
+  clientSecret: "GOCSPX-xxxxx"
+  # Redirect URL bude vždy na auth doméně
+  redirectUrl: "https://auth.mojedomena.com/auth/callback"
+  # Domény, které jsou chráněné autentizací
+  protectedDomains:
+    - "localhost:8080"
+    - "dev-cods-admin.jale.cz"
+
 rateLimits:
   "localhost:8080":
     destination: "http://localhost:8881"
@@ -13,17 +25,13 @@ rateLimits:
     ipBlackList:
       - "1.1.1.1"
     cacheMaxTtlSeconds: 3600
-    googleAuth:
-      enabled: true
-      clientId: "xxxxx"
-      clientSecret: "GOCSPX-xxxxx"
-      redirectUrl: "http://localhost:8080/auth/callback"
-      allowedEmails:
-        - "jakubloffelmann@gmail.com"
+    allowedEmails:
+      - "jakubloffelmann@gmail.com"
   dev-cods-admin.jale.cz:
     destination: "http://dev-cods-admin.app:2000"
     requests: 50
     perSecond: 1
+    allowedEmails: []  # Empty list means no Google login for this domain
 
 # global black list
 ipBlackList:

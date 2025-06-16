@@ -22,14 +22,14 @@ type Proxy struct {
 	limiters map[string]storage.Storage
 	cache    *cache.MemoryCache
 	metric   *metric.Metric
-	auth     map[string]*auth.GoogleAuthenticator
+	auth     *auth.GoogleAuthenticator
 }
 
 func NewProxy(cfg *config.Config, metric *metric.Metric) *Proxy {
 	limiters := make(map[string]storage.Storage)
-	authenticators := make(map[string]*auth.GoogleAuthenticator)
+	var authenticator *auth.GoogleAuthenticator
 
-	// Initialize limiters and authenticators for all configured hosts
+	// Initialize limiters for all configured hosts
 	for host, target := range cfg.RateLimits {
 		if target.PerSecond == -1 && target.Requests == -1 {
 			store := storage.NewFakeStorage()
@@ -40,16 +40,16 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) *Proxy {
 			fmt.Println("Host:", host, "is using ip rate limiter")
 			limiters[host] = store
 		}
+	}
 
-		// Initialize Google authenticator if enabled
-		if target.GoogleAuth != nil && target.GoogleAuth.Enabled {
-			authenticators[host] = auth.NewGoogleAuthenticator(
-				target.GoogleAuth.ClientID,
-				target.GoogleAuth.ClientSecret,
-				target.GoogleAuth.RedirectURL,
-			)
-			fmt.Println("Host:", host, "has Google authentication enabled")
-		}
+	// Initialize Google authenticator if enabled globally
+	if cfg.GoogleAuth != nil && cfg.GoogleAuth.Enabled {
+		authenticator = auth.NewGoogleAuthenticator(
+			cfg.GoogleAuth.ClientID,
+			cfg.GoogleAuth.ClientSecret,
+			cfg.GoogleAuth.RedirectURL,
+		)
+		fmt.Println("Google authentication is enabled globally")
 	}
 
 	// Initialize cache with capacity of 1000 items
@@ -60,7 +60,7 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) *Proxy {
 		limiters: limiters,
 		cache:    memCache,
 		metric:   metric,
-		auth:     authenticators,
+		auth:     authenticator,
 	}
 }
 
@@ -191,8 +191,8 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[r.Host], r.Host, p.getClientIp).Handle(handler)
 
 	// Add authentication middleware if enabled
-	if target.GoogleAuth != nil && target.GoogleAuth.Enabled {
-		handler = middleware.NewAuthMiddleware(p.config, p.auth[r.Host], r.Host).Handle(handler)
+	if p.config.GoogleAuth != nil && p.config.GoogleAuth.Enabled && len(target.AllowedEmails) > 0 {
+		handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host).Handle(handler)
 	}
 
 	// Execute the middleware chain

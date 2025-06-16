@@ -2,16 +2,17 @@ package config
 
 // Local types
 type rateLimitConfig struct {
-	Destination        string      `yaml:"destination"`
-	Requests           int         `yaml:"requests"`
-	PerSecond          int         `yaml:"perSecond"`
-	IpBlackList        []string    `yaml:"ipBlackList"`
-	CacheMaxTtlSeconds int         `yaml:"cacheMaxTtlSeconds"`
-	GoogleAuth         *GoogleAuth `yaml:"googleAuth,omitempty"`
+	Destination        string   `yaml:"destination"`
+	Requests           int      `yaml:"requests"`
+	PerSecond          int      `yaml:"perSecond"`
+	IpBlackList        []string `yaml:"ipBlackList"`
+	CacheMaxTtlSeconds int      `yaml:"cacheMaxTtlSeconds"`
+	AllowedEmails      []string `yaml:"allowedEmails"`
 }
 
 type config struct {
 	IPHeader           IPHeaderConfig             `yaml:"ipHeader"`
+	GoogleAuth         *GoogleAuth                `yaml:"googleAuth"`
 	RateLimits         map[string]rateLimitConfig `yaml:"rateLimits"`
 	IpBlackList        []string                   `yaml:"ipBlackList"`
 	CacheMaxTtlSeconds int                        `yaml:"cacheMaxTtlSeconds"`
@@ -28,18 +29,19 @@ type RateLimitConfig struct {
 	PerSecond          int             `yaml:"perSecond"`
 	IpBlackList        map[string]bool `yaml:"ipBlackList"`
 	CacheMaxTtlSeconds int             `yaml:"cacheMaxTtlSeconds"`
-	GoogleAuth         *GoogleAuth     `yaml:"googleAuth,omitempty"`
+	AllowedEmails      []string        `yaml:"allowedEmails"`
 }
 
 type GoogleAuth struct {
-	Enabled       bool     `yaml:"enabled"`
-	ClientID      string   `yaml:"clientId"`
-	ClientSecret  string   `yaml:"clientSecret"`
-	RedirectURL   string   `yaml:"redirectUrl"`
-	AllowedEmails []string `yaml:"allowedEmails"`
+	Enabled          bool     `yaml:"enabled"`
+	ClientID         string   `yaml:"clientId"`
+	ClientSecret     string   `yaml:"clientSecret"`
+	RedirectURL      string   `yaml:"redirectUrl"`
+	ProtectedDomains []string `yaml:"protectedDomains"`
 }
 
 type Config struct {
 	IPHeader   IPHeaderConfig             `yaml:"ipHeader"`
+	GoogleAuth *GoogleAuth                `yaml:"googleAuth"`
 	RateLimits map[string]RateLimitConfig `yaml:"rateLimits"`
 }
