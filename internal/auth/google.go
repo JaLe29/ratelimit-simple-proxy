@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
 
 type GoogleAuthenticator struct {
 	config *oauth2.Config
+	cfg    *config.Config
 }
 
 type GoogleUserInfo struct {
@@ -22,7 +24,7 @@ type GoogleUserInfo struct {
 	Picture       string `json:"picture"`
 }
 
-func NewGoogleAuthenticator(clientID, clientSecret, redirectURL string) *GoogleAuthenticator {
+func NewGoogleAuthenticator(clientID, clientSecret, redirectURL string, cfg *config.Config) *GoogleAuthenticator {
 	config := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
@@ -36,6 +38,7 @@ func NewGoogleAuthenticator(clientID, clientSecret, redirectURL string) *GoogleA
 
 	return &GoogleAuthenticator{
 		config: config,
+		cfg:    cfg,
 	}
 }
 
@@ -65,31 +68,54 @@ func (ga *GoogleAuthenticator) GetUserInfo(code string) (*GoogleUserInfo, error)
 }
 
 func (ga *GoogleAuthenticator) SetAuthCookie(w http.ResponseWriter, userInfo *GoogleUserInfo) {
-	// Create a session cookie with user info
-	http.SetCookie(w, &http.Cookie{
-		Name:     "google_auth",
-		Value:    userInfo.Email,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteNoneMode,
-		Expires:  time.Now().Add(24 * time.Hour),
-	})
+	// Nastavíme cookie pro všechny sdílené domény
+	for _, domain := range ga.cfg.GoogleAuth.SharedDomains {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "google_auth",
+			Value:    userInfo.Email,
+			Path:     "/",
+			Domain:   domain,
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteNoneMode,
+			Expires:  time.Now().Add(24 * time.Hour),
+		})
+	}
 }
 
 func (ga *GoogleAuthenticator) IsAuthenticated(r *http.Request) bool {
+	// Zkontrolujeme cookie pro aktuální doménu
 	cookie, err := r.Cookie("google_auth")
-	return err == nil && cookie.Value != ""
+	if err == nil && cookie.Value != "" {
+		return true
+	}
+
+	// Zkontrolujeme cookie pro všechny sdílené domény
+	for _, domain := range ga.cfg.GoogleAuth.SharedDomains {
+		// Vytvoříme nový request s upraveným hostem pro kontrolu cookie
+		req := r.Clone(r.Context())
+		req.Host = domain
+		cookie, err = req.Cookie("google_auth")
+		if err == nil && cookie.Value != "" {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (ga *GoogleAuthenticator) Logout(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     "google_auth",
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1, // Okamžité vypršení cookie
-	})
+	// Odstraníme cookie pro všechny sdílené domény
+	for _, domain := range ga.cfg.GoogleAuth.SharedDomains {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "google_auth",
+			Value:    "",
+			Path:     "/",
+			Domain:   domain,
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteNoneMode,
+			MaxAge:   -1,
+		})
+	}
 }

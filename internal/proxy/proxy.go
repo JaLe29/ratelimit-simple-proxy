@@ -48,6 +48,7 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) *Proxy {
 			cfg.GoogleAuth.ClientID,
 			cfg.GoogleAuth.ClientSecret,
 			cfg.GoogleAuth.RedirectURL,
+			cfg,
 		)
 		fmt.Println("Google authentication is enabled globally")
 	}

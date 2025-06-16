@@ -39,6 +39,13 @@ type GoogleAuth struct {
 	RedirectURL      string   `yaml:"redirectUrl"`
 	ProtectedDomains []string `yaml:"protectedDomains"`
 	AuthDomain       string   `yaml:"authDomain"`
+	SharedDomains    []string `yaml:"sharedDomains"` // Seznam domén, které sdílejí cookie
+}
+
+type DomainGroup struct {
+	Domain       string   `yaml:"domain"`       // Hlavní doména pro cookie (např. jale.cz)
+	Subdomains   []string `yaml:"subdomains"`   // Seznam subdomén, které sdílejí cookie
+	OtherDomains []string `yaml:"otherDomains"` // Jiné domény, které sdílejí cookie (např. auto.cz)
 }
 
 type Config struct {

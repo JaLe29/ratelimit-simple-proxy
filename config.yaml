@@ -17,6 +17,12 @@ googleAuth:
   protectedDomains:
     - "localhost:8080"
     - "dev-cods-admin.jale.cz"
+    - "auto.cz"
+  # Domény, které sdílejí cookie
+  sharedDomains:
+    - "jale.cz"
+    - "auto.cz"
+    - "localhost:8080"
 
 rateLimits:
   "localhost:8080":
@@ -34,6 +40,12 @@ rateLimits:
     requests: 50
     perSecond: 1
     allowedEmails: []  # Empty list means no Google login for this domain
+  auto.cz:
+    destination: "http://auto.app:2000"
+    requests: 50
+    perSecond: 1
+    allowedEmails:
+      - "jakubloffelmann@gmail.com"
 
 # global black list
 ipBlackList:

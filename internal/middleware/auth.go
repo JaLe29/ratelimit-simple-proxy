@@ -146,7 +146,7 @@ func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Nastavíme cookie pro cílovou doménu
+	// Nastavíme cookie pro všechny subdomény
 	m.authenticator.SetAuthCookie(w, userInfo)
 
 	// Přesměrujeme na cílovou doménu
