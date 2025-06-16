@@ -25,7 +25,18 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 
-	http.HandleFunc("/", proxy.ProxyHandler)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Host == config.GoogleAuth.AuthDomain {
+			if r.URL.Path == "/auth/callback" {
+				proxy.ProxyHandler(w, r)
+				return
+			}
+			http.Error(w, "Not found", http.StatusNotFound)
+			return
+		}
+
+		proxy.ProxyHandler(w, r)
+	})
 
 	log.Println("Starting proxy on :8080")
 
@@ -33,6 +44,7 @@ func main() {
 		log.Printf("Rate limit for %s: %v\n", key, value)
 	}
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Printf("Auth domain: %s\n", config.GoogleAuth.AuthDomain)
 
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }

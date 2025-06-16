@@ -82,15 +82,33 @@ func (p *Proxy) getClientIp(r *http.Request) string {
 }
 
 func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
-	clientIp := p.getClientIp(r)
-	fmt.Println("Client IP:", clientIp)
-	fmt.Println("URL:", r.URL.RequestURI())
+	// Pokud jsme na auth doméně, zpracujeme callback
+	if r.Host == p.config.GoogleAuth.AuthDomain {
+		if r.URL.Path == "/auth/callback" {
+			// Přidáme auth middleware pro zpracování callbacku
+			var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Zde by měl být kód pro zpracování callbacku
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("Processing auth callback..."))
+			})
+			handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host).Handle(handler)
+			handler.ServeHTTP(w, r)
+			return
+		}
+		// Jiné cesty na auth doméně nejsou povoleny
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
 
 	target, ok := p.config.RateLimits[r.Host]
 	if !ok {
-		http.Error(w, "Host ("+r.Host+") not found", http.StatusBadGateway)
+		http.Error(w, fmt.Sprintf("Host (%s) not found", r.Host), http.StatusBadGateway)
 		return
 	}
+
+	clientIp := p.getClientIp(r)
+	fmt.Println("Client IP:", clientIp)
+	fmt.Println("URL:", r.URL.RequestURI())
 
 	// Create middleware chain
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
