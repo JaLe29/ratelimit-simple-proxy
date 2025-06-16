@@ -38,6 +38,7 @@ type GoogleAuth struct {
 	ClientSecret     string   `yaml:"clientSecret"`
 	RedirectURL      string   `yaml:"redirectUrl"`
 	ProtectedDomains []string `yaml:"protectedDomains"`
+	AuthDomain       string   `yaml:"authDomain"`
 }
 
 type Config struct {

@@ -30,7 +30,7 @@ func NewAuthMiddleware(cfg *config.Config, authenticator *auth.GoogleAuthenticat
 func (m *AuthMiddleware) Handle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Pokud jsme na auth doméně, zpracujeme callback
-		if r.Host == "auth.mojedomena.com" {
+		if r.Host == m.config.GoogleAuth.AuthDomain {
 			if r.URL.Path == "/auth/callback" {
 				m.handleCallback(w, r)
 				return
