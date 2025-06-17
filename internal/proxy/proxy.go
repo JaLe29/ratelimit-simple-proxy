@@ -83,12 +83,12 @@ func (p *Proxy) getClientIp(r *http.Request) string {
 }
 
 func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
-	// Pokud jsme na auth doméně, zpracujeme callback
+	// If we're on the auth domain, process the callback
 	if r.Host == p.config.GoogleAuth.AuthDomain {
 		if r.URL.Path == "/auth/callback" {
-			// Přidáme auth middleware pro zpracování callbacku
+			// Add auth middleware for callback processing
 			var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Zde by měl být kód pro zpracování callbacku
+				// Here should be the code for processing the callback
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Processing auth callback..."))
 			})
@@ -96,7 +96,7 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 			handler.ServeHTTP(w, r)
 			return
 		}
-		// Jiné cesty na auth doméně nejsou povoleny
+		// Other paths on auth domain are not allowed
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}

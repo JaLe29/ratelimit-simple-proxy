@@ -68,7 +68,7 @@ func (ga *GoogleAuthenticator) GetUserInfo(code string) (*GoogleUserInfo, error)
 }
 
 func (ga *GoogleAuthenticator) SetAuthCookie(w http.ResponseWriter, userInfo *GoogleUserInfo) {
-	// Nastavíme cookie pro všechny sdílené domény
+	// Set cookie for all shared domains
 	for _, domain := range ga.cfg.GoogleAuth.SharedDomains {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "google_auth",
@@ -84,15 +84,15 @@ func (ga *GoogleAuthenticator) SetAuthCookie(w http.ResponseWriter, userInfo *Go
 }
 
 func (ga *GoogleAuthenticator) IsAuthenticated(r *http.Request) bool {
-	// Zkontrolujeme cookie pro aktuální doménu
+	// Check cookie for current domain
 	cookie, err := r.Cookie("google_auth")
 	if err == nil && cookie.Value != "" {
 		return true
 	}
 
-	// Zkontrolujeme cookie pro všechny sdílené domény
+	// Check cookie for all shared domains
 	for _, domain := range ga.cfg.GoogleAuth.SharedDomains {
-		// Vytvoříme nový request s upraveným hostem pro kontrolu cookie
+		// Create new request with modified host for cookie check
 		req := r.Clone(r.Context())
 		req.Host = domain
 		cookie, err = req.Cookie("google_auth")
@@ -105,7 +105,7 @@ func (ga *GoogleAuthenticator) IsAuthenticated(r *http.Request) bool {
 }
 
 func (ga *GoogleAuthenticator) Logout(w http.ResponseWriter) {
-	// Odstraníme cookie pro všechny sdílené domény
+	// Remove cookie for all shared domains
 	for _, domain := range ga.cfg.GoogleAuth.SharedDomains {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "google_auth",

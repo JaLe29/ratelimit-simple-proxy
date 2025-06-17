@@ -7,9 +7,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LoadConfig načte konfiguraci z YAML souboru
+// LoadConfig loads configuration from YAML file
 func LoadConfig(configPath string) (*Config, error) {
-	// Výchozí konfigurace
+	// Default configuration
 	config := &config{
 		IPHeader: IPHeaderConfig{
 			Headers: []string{"X-Forwarded-For", "X-Real-IP"},
@@ -18,7 +18,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		IpBlackList: []string{},
 	}
 
-	// Hledání konfiguračního souboru
+	// Search for configuration file
 	var configFile string
 	for _, path := range []string{configPath, ".", "./config"} {
 		file := path + "/config.yaml"
@@ -33,78 +33,78 @@ func LoadConfig(configPath string) (*Config, error) {
 		}
 	}
 
-	// Pokud soubor existuje, načti ho
+	// If file exists, load it
 	if configFile != "" {
 		data, err := os.ReadFile(configFile)
 		if err != nil {
-			return nil, fmt.Errorf("chyba při čtení konfiguračního souboru: %w", err)
+			return nil, fmt.Errorf("error reading configuration file: %w", err)
 		}
 
 		if err := yaml.Unmarshal(data, config); err != nil {
-			return nil, fmt.Errorf("chyba při parsování konfigurace: %w", err)
+			return nil, fmt.Errorf("error parsing configuration: %w", err)
 		}
 
-		fmt.Printf("Načtená konfigurace ze souboru: %s\n", configFile)
+		fmt.Printf("Loaded configuration from file: %s\n", configFile)
 	} else {
-		fmt.Println("Konfigurační soubor nenalezen, používám výchozí hodnoty")
+		fmt.Println("Configuration file not found, using default values")
 	}
 
-	// Validace konfigurace
+	// Validate configuration
 	if len(config.IPHeader.Headers) == 0 {
-		return nil, fmt.Errorf("není definován žádný header pro IP")
+		return nil, fmt.Errorf("no IP header defined")
 	}
 
-	// Validace Google Auth
+	// Validate Google Auth
 	if config.GoogleAuth != nil && config.GoogleAuth.Enabled {
 		if config.GoogleAuth.ClientID == "" {
-			return nil, fmt.Errorf("Google Auth je povoleno, ale chybí clientId")
+			return nil, fmt.Errorf("Google Auth is enabled but clientId is missing")
 		}
 		if config.GoogleAuth.ClientSecret == "" {
-			return nil, fmt.Errorf("Google Auth je povoleno, ale chybí clientSecret")
+			return nil, fmt.Errorf("Google Auth is enabled but clientSecret is missing")
 		}
 		if config.GoogleAuth.RedirectURL == "" {
-			return nil, fmt.Errorf("Google Auth je povoleno, ale chybí redirectUrl")
+			return nil, fmt.Errorf("Google Auth is enabled but redirectUrl is missing")
 		}
 	}
 
 	for key, rl := range config.RateLimits {
 		if rl.Destination == "" {
-			return nil, fmt.Errorf("u rate limitu '%s' chybí destination", key)
+			return nil, fmt.Errorf("rate limit '%s' is missing destination", key)
 		}
 		if rl.Requests < -1 {
-			return nil, fmt.Errorf("u rate limitu '%s' je neplatný počet requestů: %d", key, rl.Requests)
+			return nil, fmt.Errorf("rate limit '%s' has invalid number of requests: %d", key, rl.Requests)
 		}
 		if rl.PerSecond < -1 {
-			return nil, fmt.Errorf("u rate limitu '%s' je neplatná hodnota perSecond: %d", key, rl.PerSecond)
+			return nil, fmt.Errorf("rate limit '%s' has invalid perSecond value: %d", key, rl.PerSecond)
 		}
 
 		if rl.Requests == -1 && rl.PerSecond != -1 || rl.Requests != -1 && rl.PerSecond == -1 {
-			return nil, fmt.Errorf("u rate limitu '%s' je neplatný počet requestů a perSecond: %d, %d", key, rl.Requests, rl.PerSecond)
+			return nil, fmt.Errorf("rate limit '%s' has invalid requests and perSecond values: %d, %d", key, rl.Requests, rl.PerSecond)
 		}
 
 		if rl.CacheMaxTtlSeconds < 0 {
-			return nil, fmt.Errorf("u rate limitu '%s' je neplatná hodnota cacheMaxTtlSeconds: %d", key, rl.CacheMaxTtlSeconds)
+			return nil, fmt.Errorf("rate limit '%s' has invalid cacheMaxTtlSeconds value: %d", key, rl.CacheMaxTtlSeconds)
 		}
 
-		// Validace allowedEmails pro Google Auth
+		// Validate allowedEmails for Google Auth
 		if config.GoogleAuth != nil && config.GoogleAuth.Enabled && len(rl.AllowedEmails) > 0 {
 			if len(rl.AllowedEmails) == 0 {
-				return nil, fmt.Errorf("u rate limitu '%s' je povoleno Google Auth, ale chybí seznam povolených emailů (allowedEmails)", key)
+				return nil, fmt.Errorf("rate limit '%s' has Google Auth enabled but missing allowed emails list (allowedEmails)", key)
 			}
 		}
 	}
 
-	// Debug výpis
-	fmt.Println("Načtené rate limity:")
+	// Debug output
+	fmt.Println("Loaded rate limits:")
 	for k, rl := range config.RateLimits {
-		fmt.Printf("Klíč: %s, Destination: %s, Requests: %d, PerSecond: %d, CacheMaxTtlSeconds: %d\n",
+		fmt.Printf("Key: %s, Destination: %s, Requests: %d, PerSecond: %d, CacheMaxTtlSeconds: %d\n",
 			k, rl.Destination, rl.Requests, rl.PerSecond, rl.CacheMaxTtlSeconds)
 		if len(rl.AllowedEmails) > 0 {
 			fmt.Printf("  Allowed Emails: %v\n", rl.AllowedEmails)
 		}
 	}
 
-	// create global config with better structure
+	// Create global config with better structure
 	globalConfig := &Config{
 		IPHeader:   config.IPHeader,
 		GoogleAuth: config.GoogleAuth,
@@ -126,7 +126,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		}
 	}
 
-	// copy global blacklist to all rate limits
+	// Copy global blacklist to all rate limits
 	for _, value := range globalConfig.RateLimits {
 		for _, valueBl := range config.IpBlackList {
 			value.IpBlackList[valueBl] = true

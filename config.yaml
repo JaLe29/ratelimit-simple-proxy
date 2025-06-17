@@ -9,16 +9,16 @@ googleAuth:
   enabled: true
   clientId: "xxxxx"
   clientSecret: "GOCSPX-xxxxx"
-  # Auth doména pro zpracování přihlášení
+  # Auth domain for login processing
   authDomain: "auth.jale.cz"
-  # Redirect URL bude vždy na auth doméně
+  # Redirect URL will always be on the auth domain
   redirectUrl: "https://auth.jale.cz/auth/callback"
-  # Domény, které jsou chráněné autentizací
+  # Domains that are protected by authentication
   protectedDomains:
     - "localhost:8080"
     - "dev-cods-admin.jale.cz"
     - "auto.cz"
-  # Domény, které sdílejí cookie
+  # Domains that share cookies
   sharedDomains:
     - "jale.cz"
     - "auto.cz"

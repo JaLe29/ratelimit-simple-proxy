@@ -29,18 +29,18 @@ func NewAuthMiddleware(cfg *config.Config, authenticator *auth.GoogleAuthenticat
 // Handle processes the authentication middleware
 func (m *AuthMiddleware) Handle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Pokud jsme na auth doméně, zpracujeme callback
+		// If we're on the auth domain, process the callback
 		if r.Host == m.config.GoogleAuth.AuthDomain {
 			if r.URL.Path == "/auth/callback" {
 				m.handleCallback(w, r)
 				return
 			}
-			// Jiné cesty na auth doméně nejsou povoleny
+			// Other paths on auth domain are not allowed
 			http.Error(w, "Not found", http.StatusNotFound)
 			return
 		}
 
-		// Kontrola, zda je doména chráněná
+		// Check if the domain is protected
 		isProtected := false
 		for _, domain := range m.config.GoogleAuth.ProtectedDomains {
 			if domain == r.Host {
@@ -75,7 +75,7 @@ func (m *AuthMiddleware) Handle(next http.Handler) http.Handler {
 
 		// Check if user is authenticated
 		if !m.authenticator.IsAuthenticated(r) {
-			// Vytvoříme state parametr s informací o cílové doméně
+			// Create state parameter with target domain information
 			state := base64.URLEncoding.EncodeToString([]byte(r.Host))
 			// Redirect to Google login
 			authURL := m.authenticator.GetAuthURL(state)
@@ -94,7 +94,7 @@ func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Získáme cílovou doménu ze state parametru
+	// Get target domain from state parameter
 	state := r.URL.Query().Get("state")
 	if state == "" {
 		http.Error(w, "No state provided", http.StatusBadRequest)
@@ -113,7 +113,7 @@ func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Kontrola, zda je doména chráněná
+	// Check if the domain is protected
 	isProtected := false
 	for _, domain := range m.config.GoogleAuth.ProtectedDomains {
 		if domain == string(targetDomain) {
@@ -146,10 +146,10 @@ func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Nastavíme cookie pro všechny subdomény
+	// Set cookie for all subdomains
 	m.authenticator.SetAuthCookie(w, userInfo)
 
-	// Přesměrujeme na cílovou doménu
+	// Redirect to target domain
 	targetURL := url.URL{
 		Scheme: "https",
 		Host:   string(targetDomain),
