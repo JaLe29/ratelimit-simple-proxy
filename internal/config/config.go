@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -112,7 +113,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	for key, value := range config.RateLimits {
-		globalConfig.RateLimits[key] = RateLimitConfig{
+		rateLimitConfig := RateLimitConfig{
 			Destination:        value.Destination,
 			Requests:           value.Requests,
 			PerSecond:          value.PerSecond,
@@ -122,7 +123,41 @@ func LoadConfig(configPath string) (*Config, error) {
 		}
 
 		for _, ip := range value.IpBlackList {
-			globalConfig.RateLimits[key].IpBlackList[ip] = true
+			rateLimitConfig.IpBlackList[ip] = true
+		}
+
+		// Add the original domain
+		globalConfig.RateLimits[key] = rateLimitConfig
+
+		// Auto-generate www variants for domains
+		if key != config.GoogleAuth.AuthDomain { // Skip auth domain
+			var alternativeDomain string
+			if strings.HasPrefix(key, "www.") {
+				// If domain starts with www., also add version without www.
+				alternativeDomain = strings.TrimPrefix(key, "www.")
+			} else if !strings.Contains(key, ":") { // Only add www. for domains without port
+				// If domain doesn't start with www., also add www. version
+				alternativeDomain = "www." + key
+			}
+
+			if alternativeDomain != "" && alternativeDomain != key {
+				// Create a copy of the rate limit config for the alternative domain
+				alternativeConfig := RateLimitConfig{
+					Destination:        value.Destination,
+					Requests:           value.Requests,
+					PerSecond:          value.PerSecond,
+					IpBlackList:        make(map[string]bool),
+					CacheMaxTtlSeconds: value.CacheMaxTtlSeconds,
+					AllowedEmails:      value.AllowedEmails,
+				}
+
+				for _, ip := range value.IpBlackList {
+					alternativeConfig.IpBlackList[ip] = true
+				}
+
+				globalConfig.RateLimits[alternativeDomain] = alternativeConfig
+				fmt.Printf("Auto-generated domain variant: %s -> %s\n", key, alternativeDomain)
+			}
 		}
 	}
 
