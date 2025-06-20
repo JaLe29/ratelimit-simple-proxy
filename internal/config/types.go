@@ -30,7 +30,6 @@ type RateLimitConfig struct {
 	IPBlackList        map[string]bool `yaml:"ipBlackList"`
 	CacheMaxTTLSeconds int             `yaml:"cacheMaxTtlSeconds"`
 	AllowedEmails      []string        `yaml:"allowedEmails"`
-	InjectControlPanel bool            `yaml:"injectControlPanel"` // Inject control panel into this domain's pages
 }
 
 type GoogleAuth struct {

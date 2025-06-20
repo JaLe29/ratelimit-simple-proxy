@@ -42,15 +42,6 @@ func WriteTemplate(w io.Writer, templateName string, data TemplateData) error {
 	return err
 }
 
-// GetControlPanelHTML returns the control panel HTML content
-func GetControlPanelHTML() (string, error) {
-	content, err := templates.ReadFile("control_panel.html")
-	if err != nil {
-		return "", err
-	}
-	return string(content), nil
-}
-
 // GetLoginPageHTML returns the login page HTML content
 func GetLoginPageHTML() (string, error) {
 	content, err := templates.ReadFile("login.html")

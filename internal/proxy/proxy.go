@@ -21,13 +21,12 @@ import (
 
 // Proxy represents the reverse proxy
 type Proxy struct {
-	config           *config.Config
-	limiters         map[string]storage.Storage
-	cache            *cache.MemoryCache
-	metric           *metric.Metric
-	auth             *auth.GoogleAuthenticator
-	controlPanelHTML string
-	loginTemplate    *template.Template
+	config        *config.Config
+	limiters      map[string]storage.Storage
+	cache         *cache.MemoryCache
+	metric        *metric.Metric
+	auth          *auth.GoogleAuthenticator
+	loginTemplate *template.Template
 }
 
 // NewProxy creates a new proxy instance
@@ -62,20 +61,6 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) (*Proxy, error) {
 	// Initialize cache with capacity of 1000 items
 	memCache := cache.NewMemoryCache(1000)
 
-	// Load control panel HTML once at startup
-	var controlPanelHTML string
-	// Check if any domain has injectControlPanel enabled
-	for _, target := range cfg.RateLimits {
-		if target.InjectControlPanel {
-			var err error
-			controlPanelHTML, err = templates.GetControlPanelHTML()
-			if err != nil {
-				return nil, fmt.Errorf("failed to load control panel template: %w", err)
-			}
-			break // Load once if any domain needs it
-		}
-	}
-
 	// Load login template once at startup
 	var loginTemplate *template.Template
 	if cfg.GoogleAuth != nil && cfg.GoogleAuth.Enabled {
@@ -87,13 +72,12 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) (*Proxy, error) {
 	}
 
 	return &Proxy{
-		config:           cfg,
-		limiters:         limiters,
-		cache:            memCache,
-		metric:           metric,
-		auth:             authenticator,
-		controlPanelHTML: controlPanelHTML,
-		loginTemplate:    loginTemplate,
+		config:        cfg,
+		limiters:      limiters,
+		cache:         memCache,
+		metric:        metric,
+		auth:          authenticator,
+		loginTemplate: loginTemplate,
 	}, nil
 }
 
@@ -240,13 +224,6 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Add rate limiting middleware
 	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[r.Host], r.Host, p.getClientIp).Handle(handler)
-
-	// Add HTML injection middleware if enabled for this domain
-	if ok && target.InjectControlPanel {
-		// Create HTML injection middleware with pre-loaded HTML
-		htmlInjectMiddleware := middleware.NewHTMLInjectMiddleware(handler, p.controlPanelHTML)
-		handler = htmlInjectMiddleware
-	}
 
 	// Add authentication middleware if enabled
 	if p.auth != nil {

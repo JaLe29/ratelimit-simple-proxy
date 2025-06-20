@@ -29,29 +29,21 @@ rateLimits:
     destination: "http://localhost:8881"
     requests: -1
     perSecond: -1
-    # black list for domain
     ipBlackList:
       - "1.1.1.1"
-    cacheMaxTtlSeconds: 3600
-    allowedEmails:
-      - "jakubloffelmann@gmail.com"
-    # Inject control panel into this domain's pages
-    injectControlPanel: true
+    cacheMaxTtlSeconds: 0
+    allowedEmails: []
   dev-cods-admin.jale.cz:
     destination: "http://dev-cods-admin.app:2000"
     requests: 50
     perSecond: 1
-    allowedEmails: []  # Empty list means no Google login for this domain
-    # Inject control panel into this domain's pages
-    injectControlPanel: false
+    allowedEmails: []
   auto.cz:
     destination: "http://auto.app:2000"
     requests: 50
     perSecond: 1
     allowedEmails:
       - "jakubloffelmann@gmail.com"
-    # Inject control panel into this domain's pages
-    injectControlPanel: true
 
 # global black list
 ipBlackList:
