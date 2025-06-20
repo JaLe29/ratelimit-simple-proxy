@@ -83,10 +83,6 @@ func LoadConfig(configPath string) (*Config, error) {
 			return nil, fmt.Errorf("rate limit '%s' has invalid requests and perSecond values: %d, %d", key, rl.Requests, rl.PerSecond)
 		}
 
-		if rl.CacheMaxTTLSeconds < 0 {
-			return nil, fmt.Errorf("rate limit '%s' has invalid cacheMaxTtlSeconds value: %d", key, rl.CacheMaxTTLSeconds)
-		}
-
 		// Validate allowedEmails for Google Auth
 		if config.GoogleAuth != nil && config.GoogleAuth.Enabled && len(rl.AllowedEmails) > 0 {
 			if len(rl.AllowedEmails) == 0 {
@@ -98,8 +94,8 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Debug output
 	fmt.Println("Loaded rate limits:")
 	for k, rl := range config.RateLimits {
-		fmt.Printf("Key: %s, Destination: %s, Requests: %d, PerSecond: %d, CacheMaxTTLSeconds: %d\n",
-			k, rl.Destination, rl.Requests, rl.PerSecond, rl.CacheMaxTTLSeconds)
+		fmt.Printf("Key: %s, Destination: %s, Requests: %d, PerSecond: %d\n",
+			k, rl.Destination, rl.Requests, rl.PerSecond)
 		if len(rl.AllowedEmails) > 0 {
 			fmt.Printf("  Allowed Emails: %v\n", rl.AllowedEmails)
 		}
@@ -114,12 +110,11 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	for key, value := range config.RateLimits {
 		rateLimitConfig := RateLimitConfig{
-			Destination:        value.Destination,
-			Requests:           value.Requests,
-			PerSecond:          value.PerSecond,
-			IPBlackList:        make(map[string]bool),
-			CacheMaxTTLSeconds: value.CacheMaxTTLSeconds,
-			AllowedEmails:      value.AllowedEmails,
+			Destination:   value.Destination,
+			Requests:      value.Requests,
+			PerSecond:     value.PerSecond,
+			IPBlackList:   make(map[string]bool),
+			AllowedEmails: value.AllowedEmails,
 		}
 
 		for _, ip := range value.IPBlackList {
@@ -143,12 +138,11 @@ func LoadConfig(configPath string) (*Config, error) {
 			if alternativeDomain != "" && alternativeDomain != key {
 				// Create a copy of the rate limit config for the alternative domain
 				alternativeConfig := RateLimitConfig{
-					Destination:        value.Destination,
-					Requests:           value.Requests,
-					PerSecond:          value.PerSecond,
-					IPBlackList:        make(map[string]bool),
-					CacheMaxTTLSeconds: value.CacheMaxTTLSeconds,
-					AllowedEmails:      value.AllowedEmails,
+					Destination:   value.Destination,
+					Requests:      value.Requests,
+					PerSecond:     value.PerSecond,
+					IPBlackList:   make(map[string]bool),
+					AllowedEmails: value.AllowedEmails,
 				}
 
 				for _, ip := range value.IPBlackList {

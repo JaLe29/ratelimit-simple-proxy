@@ -1,17 +1,14 @@
 package proxy
 
 import (
-	"bytes"
 	"fmt"
 	"html/template"
-	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
+	"sync"
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/auth"
-	"github.com/JaLe29/ratelimit-simple-proxy/internal/cache"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/metric"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/middleware"
@@ -23,10 +20,13 @@ import (
 type Proxy struct {
 	config        *config.Config
 	limiters      map[string]storage.Storage
-	cache         *cache.MemoryCache
 	metric        *metric.Metric
 	auth          *auth.GoogleAuthenticator
 	loginTemplate *template.Template
+	proxyCache    map[string]*httputil.ReverseProxy // Cache for proxy instances
+	proxyMutex    sync.RWMutex
+	handlerCache  map[string]http.Handler // Cache for pre-built middleware chains
+	handlerMutex  sync.RWMutex
 }
 
 // NewProxy creates a new proxy instance
@@ -58,9 +58,6 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) (*Proxy, error) {
 		fmt.Println("Google authentication is enabled globally")
 	}
 
-	// Initialize cache with capacity of 1000 items
-	memCache := cache.NewMemoryCache(1000)
-
 	// Load login template once at startup
 	var loginTemplate *template.Template
 	if cfg.GoogleAuth != nil && cfg.GoogleAuth.Enabled {
@@ -74,10 +71,13 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) (*Proxy, error) {
 	return &Proxy{
 		config:        cfg,
 		limiters:      limiters,
-		cache:         memCache,
 		metric:        metric,
 		auth:          authenticator,
 		loginTemplate: loginTemplate,
+		proxyCache:    make(map[string]*httputil.ReverseProxy),
+		proxyMutex:    sync.RWMutex{},
+		handlerCache:  make(map[string]http.Handler),
+		handlerMutex:  sync.RWMutex{},
 	}, nil
 }
 
@@ -117,39 +117,70 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target, ok := p.config.RateLimits[r.Host]
-	if !ok {
-		http.Error(w, fmt.Sprintf("Host (%s) not found", r.Host), http.StatusBadGateway)
-		return
+	// Use cached handler for this host
+	handler := p.getOrCreateHandler(r.Host)
+	handler.ServeHTTP(w, r)
+}
+
+func (p *Proxy) getOrCreateProxy(targetURL *url.URL, clientIp string) *httputil.ReverseProxy {
+	p.proxyMutex.RLock()
+	if proxy, exists := p.proxyCache[targetURL.String()]; exists {
+		p.proxyMutex.RUnlock()
+		return proxy
+	}
+	p.proxyMutex.RUnlock()
+
+	p.proxyMutex.Lock()
+	defer p.proxyMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if proxy, exists := p.proxyCache[targetURL.String()]; exists {
+		return proxy
 	}
 
-	clientIp := p.getClientIp(r)
-	fmt.Println("Client IP:", clientIp)
-	fmt.Println("URL:", r.URL.RequestURI())
-
-	// Create middleware chain
-	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// This is the final handler that will be called if all middleware passes
-		hasCache := target.CacheMaxTTLSeconds > 0
-		shouldCache := hasCache && r.Method == http.MethodGet
-
-		if shouldCache {
-			cacheKey := cache.GetCacheKey(r)
-			if item, found := p.cache.Get(cacheKey); found {
-				fmt.Println("HIT - has cache" + strconv.FormatBool(hasCache) + ", cache key " + cacheKey)
-				for key, values := range item.Headers {
-					for _, value := range values {
-						w.Header().Add(key, value)
-					}
-				}
-				w.Header().Set("X-RLSP-Cache", "HIT")
-				w.WriteHeader(item.ResponseCode)
-				w.Write(item.Response)
-				return
-			}
-			fmt.Println("MISS - has cache" + strconv.FormatBool(hasCache) + ", cache key " + cacheKey)
-			w.Header().Set("X-RLSP-Cache", "MISS")
+	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		if origin := req.Header.Get("Origin"); origin != "" {
+			req.Header.Set("Origin", origin)
 		}
+		req.Header.Set("X-Forwarded-Host", req.Host)
+		req.Header.Set("X-Forwarded-Proto", req.URL.Scheme)
+		req.Header.Add("X-Forwarded-For", clientIp)
+	}
+
+	p.proxyCache[targetURL.String()] = proxy
+	return proxy
+}
+
+func (p *Proxy) getOrCreateHandler(host string) http.Handler {
+	p.handlerMutex.RLock()
+	if handler, exists := p.handlerCache[host]; exists {
+		p.handlerMutex.RUnlock()
+		return handler
+	}
+	p.handlerMutex.RUnlock()
+
+	p.handlerMutex.Lock()
+	defer p.handlerMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if handler, exists := p.handlerCache[host]; exists {
+		return handler
+	}
+
+	// Create the final handler
+	finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target, ok := p.config.RateLimits[host]
+		if !ok {
+			http.Error(w, fmt.Sprintf("Host (%s) not found", host), http.StatusBadGateway)
+			return
+		}
+
+		clientIp := p.getClientIp(r)
+		fmt.Println("Client IP:", clientIp)
+		fmt.Println("URL:", r.URL.RequestURI())
 
 		targetURL, err := url.Parse(target.Destination)
 		if err != nil {
@@ -157,93 +188,23 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		p.metric.RequestsTotal.WithLabelValues(r.Host).Inc()
+		p.metric.RequestsTotal.WithLabelValues(host).Inc()
 
-		if shouldCache {
-			proxy := httputil.NewSingleHostReverseProxy(targetURL)
-			originalDirector := proxy.Director
-			proxy.Director = func(req *http.Request) {
-				originalDirector(req)
-				if origin := r.Header.Get("Origin"); origin != "" {
-					req.Header.Set("Origin", origin)
-				}
-				req.Header.Set("X-Forwarded-Host", r.Host)
-				req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
-				req.Header.Add("X-Forwarded-For", clientIp)
-			}
-
-			originalTransport := proxy.Transport
-			if originalTransport == nil {
-				originalTransport = http.DefaultTransport
-			}
-
-			proxy.Transport = &cachingTransport{
-				transport: originalTransport,
-				callback: func(resp *http.Response, err error) {
-					if err != nil || !cache.ShouldCache(r, resp.StatusCode) {
-						return
-					}
-
-					respBody, err := io.ReadAll(resp.Body)
-					if err != nil {
-						return
-					}
-
-					resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
-
-					expiry := cache.GetCacheDuration(resp.Header, target.CacheMaxTTLSeconds)
-					if expiry > 0 {
-						headersCopy := http.Header{}
-						for k, v := range resp.Header {
-							headersCopy[k] = v
-						}
-
-						cacheKey := cache.GetCacheKey(r)
-						p.cache.Set(cacheKey, respBody, resp.StatusCode, headersCopy, expiry)
-					}
-				},
-			}
-
-			proxy.ServeHTTP(w, r)
-		} else {
-			proxy := httputil.NewSingleHostReverseProxy(targetURL)
-			originalDirector := proxy.Director
-			proxy.Director = func(req *http.Request) {
-				originalDirector(req)
-				if origin := r.Header.Get("Origin"); origin != "" {
-					req.Header.Set("Origin", origin)
-				}
-				req.Header.Set("X-Forwarded-Host", r.Host)
-				req.Header.Set("X-Forwarded-Proto", r.URL.Scheme)
-				req.Header.Add("X-Forwarded-For", clientIp)
-			}
-
-			proxy.ServeHTTP(w, r)
-		}
+		proxy := p.getOrCreateProxy(targetURL, clientIp)
+		proxy.ServeHTTP(w, r)
 	})
 
+	// Build middleware chain
+	var handler http.Handler = finalHandler
+
 	// Add rate limiting middleware
-	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[r.Host], r.Host, p.getClientIp).Handle(handler)
+	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[host], host, p.getClientIp).Handle(handler)
 
 	// Add authentication middleware if enabled
 	if p.auth != nil {
-		handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host, p.loginTemplate).Handle(handler)
+		handler = middleware.NewAuthMiddleware(p.config, p.auth, host, p.loginTemplate).Handle(handler)
 	}
 
-	// Execute the middleware chain
-	handler.ServeHTTP(w, r)
-}
-
-// cachingTransport is a custom HTTP transport for caching responses
-type cachingTransport struct {
-	transport http.RoundTripper
-	callback  func(*http.Response, error)
-}
-
-func (t *cachingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	response, err := t.transport.RoundTrip(request)
-	if response != nil && t.callback != nil {
-		t.callback(response, err)
-	}
-	return response, err
+	p.handlerCache[host] = handler
+	return handler
 }

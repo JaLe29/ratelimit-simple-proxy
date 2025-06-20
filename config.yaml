@@ -31,7 +31,6 @@ rateLimits:
     perSecond: -1
     ipBlackList:
       - "1.1.1.1"
-    cacheMaxTtlSeconds: 0
     allowedEmails: []
   dev-cods-admin.jale.cz:
     destination: "http://dev-cods-admin.app:2000"

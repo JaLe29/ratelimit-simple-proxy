@@ -2,20 +2,18 @@ package config
 
 // Local types
 type rateLimitConfig struct {
-	Destination        string   `yaml:"destination"`
-	Requests           int      `yaml:"requests"`
-	PerSecond          int      `yaml:"perSecond"`
-	IPBlackList        []string `yaml:"ipBlackList"`
-	CacheMaxTTLSeconds int      `yaml:"cacheMaxTtlSeconds"`
-	AllowedEmails      []string `yaml:"allowedEmails"`
+	Destination   string   `yaml:"destination"`
+	Requests      int      `yaml:"requests"`
+	PerSecond     int      `yaml:"perSecond"`
+	IPBlackList   []string `yaml:"ipBlackList"`
+	AllowedEmails []string `yaml:"allowedEmails"`
 }
 
 type config struct {
-	IPHeader           IPHeaderConfig             `yaml:"ipHeader"`
-	GoogleAuth         *GoogleAuth                `yaml:"googleAuth"`
-	RateLimits         map[string]rateLimitConfig `yaml:"rateLimits"`
-	IPBlackList        []string                   `yaml:"ipBlackList"`
-	CacheMaxTTLSeconds int                        `yaml:"cacheMaxTtlSeconds"`
+	IPHeader    IPHeaderConfig             `yaml:"ipHeader"`
+	GoogleAuth  *GoogleAuth                `yaml:"googleAuth"`
+	RateLimits  map[string]rateLimitConfig `yaml:"rateLimits"`
+	IPBlackList []string                   `yaml:"ipBlackList"`
 }
 
 // Global types
@@ -24,12 +22,11 @@ type IPHeaderConfig struct {
 }
 
 type RateLimitConfig struct {
-	Destination        string          `yaml:"destination"`
-	Requests           int             `yaml:"requests"`
-	PerSecond          int             `yaml:"perSecond"`
-	IPBlackList        map[string]bool `yaml:"ipBlackList"`
-	CacheMaxTTLSeconds int             `yaml:"cacheMaxTtlSeconds"`
-	AllowedEmails      []string        `yaml:"allowedEmails"`
+	Destination   string          `yaml:"destination"`
+	Requests      int             `yaml:"requests"`
+	PerSecond     int             `yaml:"perSecond"`
+	IPBlackList   map[string]bool `yaml:"ipBlackList"`
+	AllowedEmails []string        `yaml:"allowedEmails"`
 }
 
 type GoogleAuth struct {

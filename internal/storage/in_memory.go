@@ -8,15 +8,21 @@ import (
 // IPRateLimiter představuje rate limiter na základě IP adres
 type IPRateLimiter struct {
 	mu          sync.RWMutex
-	accessMap   map[string][]time.Time // IP adresa -> seznam časů přístupu
-	windowSecs  int                    // Časové okno v sekundách
-	maxRequests int                    // Maximální počet požadavků v okně
+	accessMap   map[string]*accessWindow // IP adresa -> access window
+	windowSecs  int                      // Časové okno v sekundách
+	maxRequests int                      // Maximální počet požadavků v okně
+}
+
+// accessWindow represents a sliding window of access times
+type accessWindow struct {
+	accesses []time.Time
+	lastIdx  int // Circular buffer index
 }
 
 // NewIPRateLimiter vytvoří novou instanci rate limiteru
 func NewIPRateLimiter(windowSeconds, maxRequests int) *IPRateLimiter {
 	limiter := &IPRateLimiter{
-		accessMap:   make(map[string][]time.Time),
+		accessMap:   make(map[string]*accessWindow),
 		windowSecs:  windowSeconds,
 		maxRequests: maxRequests,
 	}
@@ -45,9 +51,9 @@ func (r *IPRateLimiter) cleanup() {
 	now := time.Now()
 	cutoffTime := now.Add(-time.Duration(r.windowSecs) * time.Second)
 
-	for ip, accesses := range r.accessMap {
+	for ip, window := range r.accessMap {
 		var recentAccesses []time.Time
-		for _, accessTime := range accesses {
+		for _, accessTime := range window.accesses {
 			if accessTime.After(cutoffTime) {
 				recentAccesses = append(recentAccesses, accessTime)
 			}
@@ -58,7 +64,7 @@ func (r *IPRateLimiter) cleanup() {
 			delete(r.accessMap, ip)
 		} else {
 			// Aktualizuj seznam pouze na nedávné přístupy
-			r.accessMap[ip] = recentAccesses
+			window.accesses = recentAccesses
 		}
 	}
 }
@@ -72,26 +78,31 @@ func (r *IPRateLimiter) CheckLimit(ipAddress string) bool {
 	cutoffTime := now.Add(-time.Duration(r.windowSecs) * time.Second)
 
 	// Získat historii přístupů pro tuto IP
-	accessHistory, exists := r.accessMap[ipAddress]
+	window, exists := r.accessMap[ipAddress]
 
 	// Pokud není historie, vytvořit nový záznam
 	if !exists {
-		r.accessMap[ipAddress] = []time.Time{now}
-		return false // První přístup, určitě nepřekračuje limit
+		window = &accessWindow{
+			accesses: make([]time.Time, 0, r.maxRequests+1), // Pre-allocate with capacity
+		}
+		r.accessMap[ipAddress] = window
 	}
 
 	// Filtrovat pouze nedávné přístupy v rámci časového okna
-	var recentAccesses []time.Time
-	for _, accessTime := range accessHistory {
+	validCount := 0
+	for _, accessTime := range window.accesses {
 		if accessTime.After(cutoffTime) {
-			recentAccesses = append(recentAccesses, accessTime)
+			window.accesses[validCount] = accessTime
+			validCount++
 		}
 	}
 
+	// Resize slice to valid count
+	window.accesses = window.accesses[:validCount]
+
 	// Přidat aktuální přístup
-	recentAccesses = append(recentAccesses, now)
-	r.accessMap[ipAddress] = recentAccesses
+	window.accesses = append(window.accesses, now)
 
 	// Překročil limit?
-	return len(recentAccesses) > r.maxRequests
+	return len(window.accesses) > r.maxRequests
 }
