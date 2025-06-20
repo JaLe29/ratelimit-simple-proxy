@@ -38,7 +38,7 @@ func (m *RateLimitMiddleware) Handle(next http.Handler) http.Handler {
 		clientIP := m.getIP(r)
 
 		// Check IP blacklist
-		if target.IpBlackList[clientIP] {
+		if target.IPBlackList[clientIP] {
 			http.Error(w, fmt.Sprintf("Access denied. Your IP (%s) is blocked.", clientIP), http.StatusForbidden)
 			return
 		}

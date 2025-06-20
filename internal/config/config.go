@@ -16,7 +16,7 @@ func LoadConfig(configPath string) (*Config, error) {
 			Headers: []string{"X-Forwarded-For", "X-Real-IP"},
 		},
 		RateLimits:  make(map[string]rateLimitConfig),
-		IpBlackList: []string{},
+		IPBlackList: []string{},
 	}
 
 	// Search for configuration file
@@ -83,8 +83,8 @@ func LoadConfig(configPath string) (*Config, error) {
 			return nil, fmt.Errorf("rate limit '%s' has invalid requests and perSecond values: %d, %d", key, rl.Requests, rl.PerSecond)
 		}
 
-		if rl.CacheMaxTtlSeconds < 0 {
-			return nil, fmt.Errorf("rate limit '%s' has invalid cacheMaxTtlSeconds value: %d", key, rl.CacheMaxTtlSeconds)
+		if rl.CacheMaxTTLSeconds < 0 {
+			return nil, fmt.Errorf("rate limit '%s' has invalid cacheMaxTtlSeconds value: %d", key, rl.CacheMaxTTLSeconds)
 		}
 
 		// Validate allowedEmails for Google Auth
@@ -98,8 +98,8 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Debug output
 	fmt.Println("Loaded rate limits:")
 	for k, rl := range config.RateLimits {
-		fmt.Printf("Key: %s, Destination: %s, Requests: %d, PerSecond: %d, CacheMaxTtlSeconds: %d\n",
-			k, rl.Destination, rl.Requests, rl.PerSecond, rl.CacheMaxTtlSeconds)
+		fmt.Printf("Key: %s, Destination: %s, Requests: %d, PerSecond: %d, CacheMaxTTLSeconds: %d\n",
+			k, rl.Destination, rl.Requests, rl.PerSecond, rl.CacheMaxTTLSeconds)
 		if len(rl.AllowedEmails) > 0 {
 			fmt.Printf("  Allowed Emails: %v\n", rl.AllowedEmails)
 		}
@@ -117,13 +117,13 @@ func LoadConfig(configPath string) (*Config, error) {
 			Destination:        value.Destination,
 			Requests:           value.Requests,
 			PerSecond:          value.PerSecond,
-			IpBlackList:        make(map[string]bool),
-			CacheMaxTtlSeconds: value.CacheMaxTtlSeconds,
+			IPBlackList:        make(map[string]bool),
+			CacheMaxTTLSeconds: value.CacheMaxTTLSeconds,
 			AllowedEmails:      value.AllowedEmails,
 		}
 
-		for _, ip := range value.IpBlackList {
-			rateLimitConfig.IpBlackList[ip] = true
+		for _, ip := range value.IPBlackList {
+			rateLimitConfig.IPBlackList[ip] = true
 		}
 
 		// Add the original domain
@@ -146,13 +146,13 @@ func LoadConfig(configPath string) (*Config, error) {
 					Destination:        value.Destination,
 					Requests:           value.Requests,
 					PerSecond:          value.PerSecond,
-					IpBlackList:        make(map[string]bool),
-					CacheMaxTtlSeconds: value.CacheMaxTtlSeconds,
+					IPBlackList:        make(map[string]bool),
+					CacheMaxTTLSeconds: value.CacheMaxTTLSeconds,
 					AllowedEmails:      value.AllowedEmails,
 				}
 
-				for _, ip := range value.IpBlackList {
-					alternativeConfig.IpBlackList[ip] = true
+				for _, ip := range value.IPBlackList {
+					alternativeConfig.IPBlackList[ip] = true
 				}
 
 				globalConfig.RateLimits[alternativeDomain] = alternativeConfig
@@ -162,10 +162,11 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	// Copy global blacklist to all rate limits
-	for _, value := range globalConfig.RateLimits {
-		for _, valueBl := range config.IpBlackList {
-			value.IpBlackList[valueBl] = true
+	for key, value := range globalConfig.RateLimits {
+		for _, valueBl := range config.IPBlackList {
+			value.IPBlackList[valueBl] = true
 		}
+		globalConfig.RateLimits[key] = value
 	}
 
 	return globalConfig, nil
