@@ -8,6 +8,7 @@ import (
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/auth"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/templates"
 )
 
 // AuthMiddleware handles authentication for the proxy
@@ -75,16 +76,35 @@ func (m *AuthMiddleware) Handle(next http.Handler) http.Handler {
 
 		// Check if user is authenticated
 		if !m.authenticator.IsAuthenticated(r) {
-			// Create state parameter with target domain information
-			state := base64.URLEncoding.EncodeToString([]byte(r.Host))
-			// Redirect to Google login
-			authURL := m.authenticator.GetAuthURL(state)
-			http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
+			// Serve login page instead of direct redirect
+			m.serveLoginPage(w, r)
 			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// serveLoginPage serves the login page with Google login button
+func (m *AuthMiddleware) serveLoginPage(w http.ResponseWriter, r *http.Request) {
+	// Create state parameter with target domain information
+	state := base64.URLEncoding.EncodeToString([]byte(r.Host))
+	// Generate Google auth URL
+	authURL := m.authenticator.GetAuthURL(state)
+
+	// Set content type
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Render and serve the login template
+	data := templates.TemplateData{
+		AuthURL: authURL,
+	}
+
+	err := templates.WriteTemplate(w, "login.html", data)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) {
