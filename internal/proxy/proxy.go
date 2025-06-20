@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -15,17 +16,22 @@ import (
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/metric"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/middleware"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/storage"
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/templates"
 )
 
+// Proxy represents the reverse proxy
 type Proxy struct {
-	config   *config.Config
-	limiters map[string]storage.Storage
-	cache    *cache.MemoryCache
-	metric   *metric.Metric
-	auth     *auth.GoogleAuthenticator
+	config           *config.Config
+	limiters         map[string]storage.Storage
+	cache            *cache.MemoryCache
+	metric           *metric.Metric
+	auth             *auth.GoogleAuthenticator
+	controlPanelHTML string
+	loginTemplate    *template.Template
 }
 
-func NewProxy(cfg *config.Config, metric *metric.Metric) *Proxy {
+// NewProxy creates a new proxy instance
+func NewProxy(cfg *config.Config, metric *metric.Metric) (*Proxy, error) {
 	limiters := make(map[string]storage.Storage)
 	var authenticator *auth.GoogleAuthenticator
 
@@ -56,13 +62,39 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) *Proxy {
 	// Initialize cache with capacity of 1000 items
 	memCache := cache.NewMemoryCache(1000)
 
-	return &Proxy{
-		config:   cfg,
-		limiters: limiters,
-		cache:    memCache,
-		metric:   metric,
-		auth:     authenticator,
+	// Load control panel HTML once at startup
+	var controlPanelHTML string
+	// Check if any domain has injectControlPanel enabled
+	for _, target := range cfg.RateLimits {
+		if target.InjectControlPanel {
+			var err error
+			controlPanelHTML, err = templates.GetControlPanelHTML()
+			if err != nil {
+				return nil, fmt.Errorf("failed to load control panel template: %w", err)
+			}
+			break // Load once if any domain needs it
+		}
 	}
+
+	// Load login template once at startup
+	var loginTemplate *template.Template
+	if cfg.GoogleAuth != nil && cfg.GoogleAuth.Enabled {
+		var err error
+		loginTemplate, err = templates.LoadLoginTemplate()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load login template: %w", err)
+		}
+	}
+
+	return &Proxy{
+		config:           cfg,
+		limiters:         limiters,
+		cache:            memCache,
+		metric:           metric,
+		auth:             authenticator,
+		controlPanelHTML: controlPanelHTML,
+		loginTemplate:    loginTemplate,
+	}, nil
 }
 
 func (p *Proxy) getClientIp(r *http.Request) string {
@@ -92,7 +124,7 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Processing auth callback..."))
 			})
-			handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host).Handle(handler)
+			handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host, p.loginTemplate).Handle(handler)
 			handler.ServeHTTP(w, r)
 			return
 		}
@@ -114,7 +146,7 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	// Create middleware chain
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This is the final handler that will be called if all middleware passes
-		hasCache := target.CacheMaxTtlSeconds > 0
+		hasCache := target.CacheMaxTTLSeconds > 0
 		shouldCache := hasCache && r.Method == http.MethodGet
 
 		if shouldCache {
@@ -175,7 +207,7 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 					resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
 
-					expiry := cache.GetCacheDuration(resp.Header, target.CacheMaxTtlSeconds)
+					expiry := cache.GetCacheDuration(resp.Header, target.CacheMaxTTLSeconds)
 					if expiry > 0 {
 						headersCopy := http.Header{}
 						for k, v := range resp.Header {
@@ -209,9 +241,27 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	// Add rate limiting middleware
 	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[r.Host], r.Host, p.getClientIp).Handle(handler)
 
+	// Add HTML injection middleware if enabled for this domain
+	if ok && target.InjectControlPanel {
+		// Check if the domain is protected
+		isProtected := false
+		for _, domain := range p.config.GoogleAuth.ProtectedDomains {
+			if domain == r.Host {
+				isProtected = true
+				break
+			}
+		}
+
+		if isProtected {
+			// Create HTML injection middleware with pre-loaded HTML
+			htmlInjectMiddleware := middleware.NewHTMLInjectMiddleware(handler, p.controlPanelHTML)
+			handler = htmlInjectMiddleware
+		}
+	}
+
 	// Add authentication middleware if enabled
-	if p.config.GoogleAuth != nil && p.config.GoogleAuth.Enabled && len(target.AllowedEmails) > 0 {
-		handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host).Handle(handler)
+	if p.auth != nil {
+		handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host, p.loginTemplate).Handle(handler)
 	}
 
 	// Execute the middleware chain

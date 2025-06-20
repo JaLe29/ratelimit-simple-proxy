@@ -41,3 +41,26 @@ func WriteTemplate(w io.Writer, templateName string, data TemplateData) error {
 	_, err = w.Write([]byte(content))
 	return err
 }
+
+// GetControlPanelHTML returns the control panel HTML content
+func GetControlPanelHTML() (string, error) {
+	content, err := templates.ReadFile("control_panel.html")
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+// GetLoginPageHTML returns the login page HTML content
+func GetLoginPageHTML() (string, error) {
+	content, err := templates.ReadFile("login.html")
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+// LoadLoginTemplate loads and parses the login template
+func LoadLoginTemplate() (*template.Template, error) {
+	return template.ParseFS(templates, "login.html")
+}

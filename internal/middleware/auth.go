@@ -3,6 +3,7 @@ package middleware
 import (
 	"encoding/base64"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 
@@ -16,14 +17,16 @@ type AuthMiddleware struct {
 	config        *config.Config
 	authenticator *auth.GoogleAuthenticator
 	host          string
+	loginTemplate *template.Template
 }
 
 // NewAuthMiddleware creates a new authentication middleware
-func NewAuthMiddleware(cfg *config.Config, authenticator *auth.GoogleAuthenticator, host string) *AuthMiddleware {
+func NewAuthMiddleware(cfg *config.Config, authenticator *auth.GoogleAuthenticator, host string, loginTemplate *template.Template) *AuthMiddleware {
 	return &AuthMiddleware{
 		config:        cfg,
 		authenticator: authenticator,
 		host:          host,
+		loginTemplate: loginTemplate,
 	}
 }
 
@@ -100,7 +103,7 @@ func (m *AuthMiddleware) serveLoginPage(w http.ResponseWriter, r *http.Request) 
 		AuthURL: authURL,
 	}
 
-	err := templates.WriteTemplate(w, "login.html", data)
+	err := m.loginTemplate.Execute(w, data)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return

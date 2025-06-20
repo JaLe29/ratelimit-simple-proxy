@@ -16,7 +16,10 @@ func main() {
 		log.Fatalf("Error loading config: %v", err)
 	}
 
-	proxy := proxy.NewProxy(config, metric.NewMetric())
+	proxy, err := proxy.NewProxy(config, metric.NewMetric())
+	if err != nil {
+		log.Fatalf("Error creating proxy: %v", err)
+	}
 
 	http.HandleFunc("/rlsp/system/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
