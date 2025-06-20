@@ -8,6 +8,7 @@ import (
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/auth"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/metric"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/templates"
 )
 
@@ -16,14 +17,16 @@ type AuthMiddleware struct {
 	config        *config.Config
 	authenticator *auth.GoogleAuthenticator
 	host          string
+	metric        *metric.Metric
 }
 
 // NewAuthMiddleware creates a new authentication middleware
-func NewAuthMiddleware(cfg *config.Config, authenticator *auth.GoogleAuthenticator, host string) *AuthMiddleware {
+func NewAuthMiddleware(cfg *config.Config, authenticator *auth.GoogleAuthenticator, host string, metric *metric.Metric) *AuthMiddleware {
 	return &AuthMiddleware{
 		config:        cfg,
 		authenticator: authenticator,
 		host:          host,
+		metric:        metric,
 	}
 }
 
@@ -129,6 +132,8 @@ func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) 
 
 	userInfo, err := m.authenticator.GetUserInfo(code)
 	if err != nil {
+		// Record failed login due to Google API error
+		m.metric.LoginFailure.WithLabelValues("unknown", string(targetDomain), "google_api_error").Inc()
 		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
 		return
 	}
@@ -143,12 +148,16 @@ func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if !isProtected {
+		// Record failed login due to invalid domain
+		m.metric.LoginFailure.WithLabelValues(userInfo.Email, string(targetDomain), "invalid_domain").Inc()
 		http.Error(w, "Invalid target domain", http.StatusBadRequest)
 		return
 	}
 
 	target, ok := m.config.RateLimits[string(targetDomain)]
 	if !ok {
+		// Record failed login due to domain not found
+		m.metric.LoginFailure.WithLabelValues(userInfo.Email, string(targetDomain), "domain_not_found").Inc()
 		http.Error(w, fmt.Sprintf("Host (%s) not found", targetDomain), http.StatusBadGateway)
 		return
 	}
@@ -162,9 +171,14 @@ func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	if !emailAllowed {
+		// Record failed login due to unauthorized email
+		m.metric.LoginFailure.WithLabelValues(userInfo.Email, string(targetDomain), "unauthorized_email").Inc()
 		http.Error(w, fmt.Sprintf("Access denied. Email %s is not authorized to access this resource.", userInfo.Email), http.StatusForbidden)
 		return
 	}
+
+	// Record successful login
+	m.metric.LoginSuccess.WithLabelValues(userInfo.Email, string(targetDomain)).Inc()
 
 	// Set cookie for all subdomains
 	m.authenticator.SetAuthCookie(w, userInfo)

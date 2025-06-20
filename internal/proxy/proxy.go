@@ -92,7 +92,7 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("Processing auth callback..."))
 			})
-			handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host).Handle(handler)
+			handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host, p.metric).Handle(handler)
 			handler.ServeHTTP(w, r)
 			return
 		}
@@ -211,7 +211,7 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Add authentication middleware if enabled
 	if p.config.GoogleAuth != nil && p.config.GoogleAuth.Enabled && len(target.AllowedEmails) > 0 {
-		handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host).Handle(handler)
+		handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host, p.metric).Handle(handler)
 	}
 
 	// Execute the middleware chain
