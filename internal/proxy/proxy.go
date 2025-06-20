@@ -243,20 +243,9 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Add HTML injection middleware if enabled for this domain
 	if ok && target.InjectControlPanel {
-		// Check if the domain is protected
-		isProtected := false
-		for _, domain := range p.config.GoogleAuth.ProtectedDomains {
-			if domain == r.Host {
-				isProtected = true
-				break
-			}
-		}
-
-		if isProtected {
-			// Create HTML injection middleware with pre-loaded HTML
-			htmlInjectMiddleware := middleware.NewHTMLInjectMiddleware(handler, p.controlPanelHTML)
-			handler = htmlInjectMiddleware
-		}
+		// Create HTML injection middleware with pre-loaded HTML
+		htmlInjectMiddleware := middleware.NewHTMLInjectMiddleware(handler, p.controlPanelHTML)
+		handler = htmlInjectMiddleware
 	}
 
 	// Add authentication middleware if enabled

@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -38,23 +39,44 @@ func (m *HTMLInjectMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		// Inject the control panel
 		injectedBody := injectControlPanel(body, m.controlPanelHTML)
 
+		// Copy all headers from the original response
+		for key, values := range responseWriter.Header() {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+
+		// Update Content-Length with the new body size
+		w.Header().Set("Content-Length", strconv.Itoa(len(injectedBody)))
+
 		// Write the modified response
-		w.Header().Set("Content-Length", string(len(injectedBody)))
+		w.WriteHeader(responseWriter.statusCode)
 		w.Write([]byte(injectedBody))
 	} else {
-		// For non-HTML responses, write the original response
+		// For non-HTML responses, copy headers and write the original response
+		for key, values := range responseWriter.Header() {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+		w.WriteHeader(responseWriter.statusCode)
 		w.Write(responseWriter.buffer.Bytes())
 	}
 }
 
-// responseCaptureWriter captures the response body
+// responseCaptureWriter captures the response body and status code
 type responseCaptureWriter struct {
 	http.ResponseWriter
-	buffer *bytes.Buffer
+	buffer     *bytes.Buffer
+	statusCode int
 }
 
 func (w *responseCaptureWriter) Write(data []byte) (int, error) {
 	return w.buffer.Write(data)
+}
+
+func (w *responseCaptureWriter) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
 }
 
 // isHTMLResponse checks if the response is HTML
