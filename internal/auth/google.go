@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -49,19 +51,30 @@ func (ga *GoogleAuthenticator) GetAuthURL(state string) string {
 func (ga *GoogleAuthenticator) GetUserInfo(code string) (*GoogleUserInfo, error) {
 	token, err := ga.config.Exchange(context.Background(), code)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 	}
 
 	client := ga.config.Client(context.Background(), token)
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get user info from Google API: %w", err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		// Read the response body to get more details about the error
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Google API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
 	var userInfo GoogleUserInfo
 	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode user info response: %w", err)
+	}
+
+	// Validate that we got the required fields
+	if userInfo.Email == "" {
+		return nil, fmt.Errorf("user info response missing email field")
 	}
 
 	return &userInfo, nil

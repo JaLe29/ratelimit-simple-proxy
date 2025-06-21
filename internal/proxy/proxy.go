@@ -138,13 +138,11 @@ func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	// If we're on the auth domain, process the callback
 	if r.Host == p.config.GoogleAuth.AuthDomain {
 		if r.URL.Path == "/auth/callback" {
-			// Add auth middleware for callback processing
-			var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Here should be the code for processing the callback
-				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("Processing auth callback..."))
-			})
-			handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host, p.loginTemplate).Handle(handler)
+			// Let the auth middleware handle the callback properly
+			handler := middleware.NewAuthMiddleware(p.config, p.auth, r.Host, p.loginTemplate).Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// This should never be reached for callback path
+				http.Error(w, "Not found", http.StatusNotFound)
+			}))
 			handler.ServeHTTP(w, r)
 			return
 		}
