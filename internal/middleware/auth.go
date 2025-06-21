@@ -132,6 +132,7 @@ func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) 
 
 	userInfo, err := m.authenticator.GetUserInfo(code)
 	if err != nil {
+		fmt.Println("Error getting user info:", err)
 		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
 		return
 	}
