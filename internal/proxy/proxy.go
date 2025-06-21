@@ -176,7 +176,7 @@ func (p *Proxy) getOrCreateProxy(targetURL *url.URL, clientIp string) *httputil.
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
-		req.Header.Set("Origin", targetURL.String())
+		req.Header.Set("Origin", req.Host)
 		req.Header.Set("X-Forwarded-Host", req.Host)
 		req.Header.Set("X-Forwarded-Proto", req.URL.Scheme)
 		req.Header.Add("X-Forwarded-For", clientIp)
