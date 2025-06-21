@@ -7,6 +7,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/auth"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
@@ -27,6 +28,27 @@ type Proxy struct {
 	proxyMutex    sync.RWMutex
 	handlerCache  map[string]http.Handler // Cache for pre-built middleware chains
 	handlerMutex  sync.RWMutex
+}
+
+// responseTimeWriter wraps http.ResponseWriter to track response time
+type responseTimeWriter struct {
+	http.ResponseWriter
+	startTime time.Time
+	metric    *metric.Metric
+	origin    string
+}
+
+func (w *responseTimeWriter) WriteHeader(statusCode int) {
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *responseTimeWriter) Write(data []byte) (int, error) {
+	return w.ResponseWriter.Write(data)
+}
+
+func (w *responseTimeWriter) Close() {
+	duration := time.Since(w.startTime).Seconds()
+	w.metric.ResponseTime.WithLabelValues(w.origin).Observe(duration)
 }
 
 // NewProxy creates a new proxy instance
@@ -96,6 +118,14 @@ func (p *Proxy) getClientIp(r *http.Request) string {
 	}
 
 	return clientIp
+}
+
+// normalizeDomain removes www prefix from domain names for consistent metric labeling
+func (p *Proxy) normalizeDomain(host string) string {
+	if len(host) > 4 && host[:4] == "www." {
+		return host[4:]
+	}
+	return host
 }
 
 func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
@@ -188,10 +218,23 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 			return
 		}
 
-		p.metric.RequestsTotal.WithLabelValues(host).Inc()
+		// Normalize domain for consistent metrics
+		normalizedDomain := p.normalizeDomain(host)
+		p.metric.RequestsTotal.WithLabelValues(normalizedDomain).Inc()
+
+		// Create response time writer
+		rtw := &responseTimeWriter{
+			ResponseWriter: w,
+			startTime:      time.Now(),
+			metric:         p.metric,
+			origin:         normalizedDomain,
+		}
 
 		proxy := p.getOrCreateProxy(targetURL, clientIp)
-		proxy.ServeHTTP(w, r)
+		proxy.ServeHTTP(rtw, r)
+
+		// Record response time
+		rtw.Close()
 	})
 
 	// Build middleware chain
