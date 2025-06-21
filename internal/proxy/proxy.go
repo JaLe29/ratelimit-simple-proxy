@@ -38,6 +38,7 @@ type responseTimeWriter struct {
 	startTime time.Time
 	metric    *metric.Metric
 	origin    string
+	recorded  bool
 }
 
 func (w *responseTimeWriter) WriteHeader(statusCode int) {
@@ -48,9 +49,12 @@ func (w *responseTimeWriter) Write(data []byte) (int, error) {
 	return w.ResponseWriter.Write(data)
 }
 
-func (w *responseTimeWriter) Close() {
-	duration := time.Since(w.startTime).Seconds()
-	w.metric.ResponseTime.WithLabelValues(w.origin).Observe(duration)
+func (w *responseTimeWriter) recordResponseTime() {
+	if !w.recorded {
+		duration := time.Since(w.startTime).Seconds()
+		w.metric.ResponseTime.WithLabelValues(w.origin).Observe(duration)
+		w.recorded = true
+	}
 }
 
 // NewProxy creates a new proxy instance
@@ -230,13 +234,14 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 			startTime:      time.Now(),
 			metric:         p.metric,
 			origin:         normalizedDomain,
+			recorded:       false,
 		}
+
+		// Ensure response time is recorded when the handler completes
+		defer rtw.recordResponseTime()
 
 		proxy := p.getOrCreateProxy(targetURL, clientIp)
 		proxy.ServeHTTP(rtw, r)
-
-		// Record response time
-		rtw.Close()
 	})
 
 	// Build middleware chain
