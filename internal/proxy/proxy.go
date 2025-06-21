@@ -1,10 +1,12 @@
 package proxy
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -47,6 +49,13 @@ func (w *responseTimeWriter) WriteHeader(statusCode int) {
 
 func (w *responseTimeWriter) Write(data []byte) (int, error) {
 	return w.ResponseWriter.Write(data)
+}
+
+func (w *responseTimeWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hijacker, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return hijacker.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
 
 func (w *responseTimeWriter) recordResponseTime() {
