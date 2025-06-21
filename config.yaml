@@ -7,8 +7,8 @@ ipHeader:
 # Global Google Auth configuration
 googleAuth:
   enabled: true
-  clientId: "xxxxx"
-  clientSecret: "GOCSPX-xxxxx"
+  clientId: "123456789-abcdefghijklmnopqrstuvwxyz123456.apps.googleusercontent.com"
+  clientSecret: "GOCSPX-abcdefghijklmnopqrstuvwxyz123456"
   # Auth domain for login processing
   authDomain: "auth.jale.cz"
   # Redirect URL will always be on the auth domain

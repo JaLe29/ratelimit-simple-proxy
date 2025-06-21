@@ -135,19 +135,19 @@ func (p *Proxy) normalizeDomain(host string) string {
 }
 
 func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
-	// If we're on the auth domain, process the callback
+	// Special handling for auth domain
 	if r.Host == p.config.GoogleAuth.AuthDomain {
-		if r.URL.Path == "/auth/callback" {
-			// Let the auth middleware handle the callback properly
-			handler := middleware.NewAuthMiddleware(p.config, p.auth, r.Host, p.loginTemplate).Handle(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// This should never be reached for callback path
-				http.Error(w, "Not found", http.StatusNotFound)
-			}))
-			handler.ServeHTTP(w, r)
-			return
+		// Create auth-only handler for auth domain
+		var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "Not found", http.StatusNotFound)
+		})
+
+		// Add authentication middleware for auth domain
+		if p.auth != nil {
+			handler = middleware.NewAuthMiddleware(p.config, p.auth, r.Host, p.loginTemplate).Handle(handler)
 		}
-		// Other paths on auth domain are not allowed
-		http.Error(w, "Not found", http.StatusNotFound)
+
+		handler.ServeHTTP(w, r)
 		return
 	}
 
