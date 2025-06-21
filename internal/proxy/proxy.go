@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"context"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -250,4 +252,21 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 
 	p.handlerCache[host] = handler
 	return handler
+}
+
+// Shutdown gracefully shuts down the proxy and cleans up resources
+func (p *Proxy) Shutdown(ctx context.Context) error {
+	log.Println("Shutting down proxy...")
+
+	// Clean up rate limiters
+	for host, limiter := range p.limiters {
+		if closer, ok := limiter.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil {
+				log.Printf("Error closing limiter for %s: %v", host, err)
+			}
+		}
+	}
+
+	log.Println("Proxy shutdown completed")
+	return nil
 }
