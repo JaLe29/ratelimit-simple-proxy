@@ -1,34 +1,18 @@
-# Build stage
-FROM golang:1.24-alpine AS builder
+# Build
+FROM golang:1.24-alpine as builder
 
 WORKDIR /app
 
-# Copy go mod files first for better layer caching
-COPY go.mod go.sum ./
+COPY ./go.mod								./go.mod
+COPY ./go.sum								./go.sum
+COPY ./internal								./internal
+COPY ./cmd									./cmd
 
-# Download dependencies
-RUN go mod download
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o build/main /app/cmd/app/main.go
 
-# Copy source code
-COPY . .
+# Production image
+FROM gcr.io/distroless/static
 
-# Build with optimizations for production
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
-    -trimpath \
-    -o /app/main \
-    ./cmd/app/main.go
-
-# Production stage
-FROM scratch
-
-# Copy binary
-COPY --from=builder /app/main /main
-
-# Use non-root user for security
-USER 1000:1000
-
-# Expose port
-EXPOSE 8080
+COPY --from=builder /app/build/main /main
 
 CMD ["/main"]
