@@ -187,6 +187,7 @@ func (p *Proxy) getOrCreateProxy(targetURL *url.URL, clientIp string) *httputil.
 		originalDirector(req)
 		fmt.Println("Request Host Origin:", p.normalizeDomain(req.Host))
 		req.Header.Set("Origin", p.normalizeDomain(req.Host))
+		req.Header.Set("Host", (req.Host))
 		req.Header.Set("X-Forwarded-Host", req.Host)
 		req.Header.Set("X-Forwarded-Proto", req.URL.Scheme)
 		req.Header.Add("X-Forwarded-For", clientIp)
@@ -252,9 +253,6 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 
 	// Build middleware chain
 	var handler http.Handler = finalHandler
-
-	// Add CORS middleware (first in chain, last to execute)
-	handler = middleware.NewCORSMiddleware(p.config, host).Handle(handler)
 
 	// Add rate limiting middleware
 	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[host], host, p.getClientIp).Handle(handler)
