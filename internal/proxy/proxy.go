@@ -253,6 +253,9 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 	// Build middleware chain
 	var handler http.Handler = finalHandler
 
+	// Add CORS middleware (first in chain, last to execute)
+	handler = middleware.NewCORSMiddleware(p.config, host).Handle(handler)
+
 	// Add rate limiting middleware
 	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[host], host, p.getClientIp).Handle(handler)
 
