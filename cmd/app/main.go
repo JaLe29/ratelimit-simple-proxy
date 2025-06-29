@@ -86,7 +86,28 @@ func createHandler(config *config.Config, proxy *proxy.Proxy) http.Handler {
 
 	// Main proxy handler
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Host == config.GoogleAuth.AuthDomain {
+		// Check if we're on any auth domain
+		isAuthDomain := false
+		if config.GoogleAuth != nil && config.GoogleAuth.Enabled {
+			// Check if current host is an auth domain for any configured domain
+			for host := range config.RateLimits {
+				// Get auth domain for this host
+				authDomain := config.GoogleAuth.AuthDomain // Default
+				if rateLimit, exists := config.RateLimits[host]; exists && rateLimit.Auth != nil {
+					authDomain = rateLimit.Auth.Domain
+				}
+				if r.Host == authDomain {
+					isAuthDomain = true
+					break
+				}
+			}
+			// Also check default auth domain
+			if r.Host == config.GoogleAuth.AuthDomain {
+				isAuthDomain = true
+			}
+		}
+
+		if isAuthDomain {
 			if r.URL.Path == "/auth/callback" {
 				proxy.ProxyHandler(w, r)
 				return

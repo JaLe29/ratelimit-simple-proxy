@@ -2,11 +2,18 @@ package config
 
 // Local types
 type rateLimitConfig struct {
-	Destination   string   `yaml:"destination"`
-	Requests      int      `yaml:"requests"`
-	PerSecond     int      `yaml:"perSecond"`
-	IPBlackList   []string `yaml:"ipBlackList"`
-	AllowedEmails []string `yaml:"allowedEmails"`
+	Destination   string      `yaml:"destination"`
+	Requests      int         `yaml:"requests"`
+	PerSecond     int         `yaml:"perSecond"`
+	IPBlackList   []string    `yaml:"ipBlackList"`
+	AllowedEmails []string    `yaml:"allowedEmails"`
+	Auth          *DomainAuth `yaml:"auth"`
+}
+
+// DomainAuth represents authentication configuration for a specific domain
+type DomainAuth struct {
+	Domain      string `yaml:"domain"`      // Auth domain for this specific domain
+	RedirectURL string `yaml:"redirectUrl"` // Redirect URL for this specific domain
 }
 
 type config struct {
@@ -27,6 +34,7 @@ type RateLimitConfig struct {
 	PerSecond     int             `yaml:"perSecond"`
 	IPBlackList   map[string]bool `yaml:"ipBlackList"`
 	AllowedEmails []string        `yaml:"allowedEmails"`
+	Auth          *DomainAuth     `yaml:"auth"`
 }
 
 type GoogleAuth struct {

@@ -6,8 +6,9 @@ import (
 )
 
 type Metric struct {
-	RequestsTotal *prometheus.CounterVec
-	ResponseTime  *prometheus.HistogramVec
+	RequestsTotal  *prometheus.CounterVec
+	ResponseTime   *prometheus.HistogramVec
+	ResponseStatus *prometheus.CounterVec
 }
 
 func NewMetric() *Metric {
@@ -23,8 +24,14 @@ func NewMetric() *Metric {
 		Buckets: prometheus.DefBuckets, // Default buckets: .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10
 	}, []string{"origin"})
 
+	responseStatus := promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "rlsp_response_status_total",
+		Help: "The total number of responses by HTTP status code",
+	}, []string{"origin", "status"})
+
 	return &Metric{
-		RequestsTotal: requestsTotal,
-		ResponseTime:  responseTime,
+		RequestsTotal:  requestsTotal,
+		ResponseTime:   responseTime,
+		ResponseStatus: responseStatus,
 	}
 }

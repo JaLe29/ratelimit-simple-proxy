@@ -12,8 +12,8 @@ import (
 )
 
 type GoogleAuthenticator struct {
-	config *oauth2.Config
-	cfg    *config.Config
+	oauthConfig *oauth2.Config
+	cfg         *config.Config
 }
 
 type GoogleUserInfo struct {
@@ -25,7 +25,7 @@ type GoogleUserInfo struct {
 }
 
 func NewGoogleAuthenticator(clientID, clientSecret, redirectURL string, cfg *config.Config) *GoogleAuthenticator {
-	config := &oauth2.Config{
+	oauthConfig := &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
@@ -37,22 +37,71 @@ func NewGoogleAuthenticator(clientID, clientSecret, redirectURL string, cfg *con
 	}
 
 	return &GoogleAuthenticator{
-		config: config,
-		cfg:    cfg,
+		oauthConfig: oauthConfig,
+		cfg:         cfg,
 	}
 }
 
-func (ga *GoogleAuthenticator) GetAuthURL(state string) string {
-	return ga.config.AuthCodeURL(state)
+// GetAuthURL generates auth URL with dynamic redirect URL based on target domain
+func (ga *GoogleAuthenticator) GetAuthURL(state string, targetDomain string) string {
+	// Get domain-specific auth configuration
+	domainConfig, exists := ga.cfg.RateLimits[targetDomain]
+	if !exists {
+		// Fallback to default config
+		return ga.oauthConfig.AuthCodeURL(state)
+	}
+
+	// If domain has specific auth config, use it
+	if domainConfig.Auth != nil && domainConfig.Auth.RedirectURL != "" {
+		// Create new OAuth config with domain-specific redirect URL
+		domainOAuthConfig := &oauth2.Config{
+			ClientID:     ga.oauthConfig.ClientID,
+			ClientSecret: ga.oauthConfig.ClientSecret,
+			RedirectURL:  domainConfig.Auth.RedirectURL,
+			Scopes:       ga.oauthConfig.Scopes,
+			Endpoint:     ga.oauthConfig.Endpoint,
+		}
+		return domainOAuthConfig.AuthCodeURL(state)
+	}
+
+	// Fallback to default config
+	return ga.oauthConfig.AuthCodeURL(state)
 }
 
-func (ga *GoogleAuthenticator) GetUserInfo(code string) (*GoogleUserInfo, error) {
-	token, err := ga.config.Exchange(context.Background(), code)
+// GetUserInfo gets user info using domain-specific OAuth config
+func (ga *GoogleAuthenticator) GetUserInfo(code string, targetDomain string) (*GoogleUserInfo, error) {
+	// Get domain-specific auth configuration
+	domainConfig, exists := ga.cfg.RateLimits[targetDomain]
+	if !exists {
+		// Fallback to default config
+		return ga.getUserInfoWithConfig(code, ga.oauthConfig)
+	}
+
+	// If domain has specific auth config, use it
+	if domainConfig.Auth != nil && domainConfig.Auth.RedirectURL != "" {
+		// Create new OAuth config with domain-specific redirect URL
+		domainOAuthConfig := &oauth2.Config{
+			ClientID:     ga.oauthConfig.ClientID,
+			ClientSecret: ga.oauthConfig.ClientSecret,
+			RedirectURL:  domainConfig.Auth.RedirectURL,
+			Scopes:       ga.oauthConfig.Scopes,
+			Endpoint:     ga.oauthConfig.Endpoint,
+		}
+		return ga.getUserInfoWithConfig(code, domainOAuthConfig)
+	}
+
+	// Fallback to default config
+	return ga.getUserInfoWithConfig(code, ga.oauthConfig)
+}
+
+// getUserInfoWithConfig gets user info using specific OAuth config
+func (ga *GoogleAuthenticator) getUserInfoWithConfig(code string, oauthConfig *oauth2.Config) (*GoogleUserInfo, error) {
+	token, err := oauthConfig.Exchange(context.Background(), code)
 	if err != nil {
 		return nil, err
 	}
 
-	client := ga.config.Client(context.Background(), token)
+	client := oauthConfig.Client(context.Background(), token)
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
 		return nil, err
@@ -65,6 +114,24 @@ func (ga *GoogleAuthenticator) GetUserInfo(code string) (*GoogleUserInfo, error)
 	}
 
 	return &userInfo, nil
+}
+
+// GetAuthDomain returns the auth domain for a specific target domain
+func (ga *GoogleAuthenticator) GetAuthDomain(targetDomain string) string {
+	// Get domain-specific auth configuration
+	domainConfig, exists := ga.cfg.RateLimits[targetDomain]
+	if !exists {
+		// Fallback to default auth domain
+		return ga.cfg.GoogleAuth.AuthDomain
+	}
+
+	// If domain has specific auth config, use it
+	if domainConfig.Auth != nil && domainConfig.Auth.Domain != "" {
+		return domainConfig.Auth.Domain
+	}
+
+	// Fallback to default auth domain
+	return ga.cfg.GoogleAuth.AuthDomain
 }
 
 func (ga *GoogleAuthenticator) SetAuthCookie(w http.ResponseWriter, userInfo *GoogleUserInfo) {

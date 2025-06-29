@@ -34,16 +34,18 @@ type Proxy struct {
 	handlerMutex  sync.RWMutex
 }
 
-// responseTimeWriter wraps http.ResponseWriter to track response time
+// responseTimeWriter wraps http.ResponseWriter to track response time and status code
 type responseTimeWriter struct {
 	http.ResponseWriter
-	startTime time.Time
-	metric    *metric.Metric
-	origin    string
-	recorded  bool
+	startTime  time.Time
+	metric     *metric.Metric
+	origin     string
+	recorded   bool
+	statusCode int
 }
 
 func (w *responseTimeWriter) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
 }
 
@@ -62,6 +64,14 @@ func (w *responseTimeWriter) recordResponseTime() {
 	if !w.recorded {
 		duration := time.Since(w.startTime).Seconds()
 		w.metric.ResponseTime.WithLabelValues(w.origin).Observe(duration)
+
+		// Record status code metric (default to 200 if WriteHeader wasn't called)
+		statusCode := w.statusCode
+		if statusCode == 0 {
+			statusCode = 200
+		}
+		w.metric.ResponseStatus.WithLabelValues(w.origin, fmt.Sprintf("%d", statusCode)).Inc()
+
 		w.recorded = true
 	}
 }
@@ -144,8 +154,24 @@ func (p *Proxy) normalizeDomain(host string) string {
 }
 
 func (p *Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
-	// Special handling for auth domain
-	if r.Host == p.config.GoogleAuth.AuthDomain {
+	// Check if we're on any auth domain
+	isAuthDomain := false
+	if p.auth != nil {
+		// Check if current host is an auth domain for any configured domain
+		for host := range p.config.RateLimits {
+			authDomain := p.auth.GetAuthDomain(host)
+			if r.Host == authDomain {
+				isAuthDomain = true
+				break
+			}
+		}
+		// Also check default auth domain
+		if r.Host == p.config.GoogleAuth.AuthDomain {
+			isAuthDomain = true
+		}
+	}
+
+	if isAuthDomain {
 		// Create auth-only handler for auth domain
 		var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Not found", http.StatusNotFound)

@@ -33,8 +33,9 @@ func NewAuthMiddleware(cfg *config.Config, authenticator *auth.GoogleAuthenticat
 // Handle processes the authentication middleware
 func (m *AuthMiddleware) Handle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// If we're on the auth domain, process the callback
-		if r.Host == m.config.GoogleAuth.AuthDomain {
+		// Check if we're on an auth domain
+		authDomain := m.authenticator.GetAuthDomain(r.Host)
+		if r.Host == authDomain {
 			if r.URL.Path == "/auth/callback" {
 				m.handleCallback(w, r)
 				return
@@ -92,8 +93,8 @@ func (m *AuthMiddleware) Handle(next http.Handler) http.Handler {
 func (m *AuthMiddleware) serveLoginPage(w http.ResponseWriter, r *http.Request) {
 	// Create state parameter with target domain information
 	state := base64.URLEncoding.EncodeToString([]byte(r.Host))
-	// Generate Google auth URL
-	authURL := m.authenticator.GetAuthURL(state)
+	// Generate Google auth URL with dynamic redirect URL
+	authURL := m.authenticator.GetAuthURL(state, r.Host)
 
 	// Set content type
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -130,7 +131,8 @@ func (m *AuthMiddleware) handleCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	userInfo, err := m.authenticator.GetUserInfo(code)
+	// Get user info using domain-specific OAuth config
+	userInfo, err := m.authenticator.GetUserInfo(code, string(targetDomain))
 	if err != nil {
 		fmt.Println("Error getting user info:", err)
 		http.Error(w, "Failed to get user info", http.StatusInternalServerError)

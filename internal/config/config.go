@@ -115,6 +115,7 @@ func LoadConfig(configPath string) (*Config, error) {
 			PerSecond:     value.PerSecond,
 			IPBlackList:   make(map[string]bool),
 			AllowedEmails: value.AllowedEmails,
+			Auth:          value.Auth,
 		}
 
 		for _, ip := range value.IPBlackList {
@@ -143,6 +144,7 @@ func LoadConfig(configPath string) (*Config, error) {
 					PerSecond:     value.PerSecond,
 					IPBlackList:   make(map[string]bool),
 					AllowedEmails: value.AllowedEmails,
+					Auth:          value.Auth,
 				}
 
 				for _, ip := range value.IPBlackList {
