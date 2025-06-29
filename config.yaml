@@ -20,12 +20,15 @@ googleAuth:
     - "auto.cz"
     - "shop.cz"
     - "blog.cz"
+    - "mujucitelautoskoly.cz"
   # Domains that share cookies
   sharedDomains:
     - "jale.cz"
     - "auto.cz"
     - "shop.cz"
     - "blog.cz"
+    - "mujucitelautoskoly.cz"
+    - "auth.jale.cz"
     - "localhost:8080"
 
 rateLimits:
@@ -86,6 +89,17 @@ rateLimits:
     allowedEmails:
       - "editor@blog.cz"
     # Žádná auth konfigurace - použije se default
+
+  # Vaše nová doména - používá auth.jale.cz
+  "mujucitelautoskoly.cz":
+    destination: "http://mujucitelautoskoly.app:2000"
+    requests: 50
+    perSecond: 1
+    allowedEmails:
+      - "jakubloffelmann@gmail.com"
+      - "admin@mujucitelautoskoly.cz"
+    # Žádná auth konfigurace - použije se default z googleAuth
+    # (auth.jale.cz a https://auth.jale.cz/auth/callback)
 
 # global black list
 ipBlackList:

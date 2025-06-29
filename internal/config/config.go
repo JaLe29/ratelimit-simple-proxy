@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -125,36 +124,39 @@ func LoadConfig(configPath string) (*Config, error) {
 		// Add the original domain
 		globalConfig.RateLimits[key] = rateLimitConfig
 
-		// Auto-generate www variants for domains
-		if key != config.GoogleAuth.AuthDomain { // Skip auth domain
-			var alternativeDomain string
-			if strings.HasPrefix(key, "www.") {
-				// If domain starts with www., also add version without www.
-				alternativeDomain = strings.TrimPrefix(key, "www.")
-			} else if !strings.Contains(key, ":") { // Only add www. for domains without port
-				// If domain doesn't start with www., also add www. version
-				alternativeDomain = "www." + key
-			}
-
-			if alternativeDomain != "" && alternativeDomain != key {
-				// Create a copy of the rate limit config for the alternative domain
-				alternativeConfig := RateLimitConfig{
-					Destination:   value.Destination,
-					Requests:      value.Requests,
-					PerSecond:     value.PerSecond,
-					IPBlackList:   make(map[string]bool),
-					AllowedEmails: value.AllowedEmails,
-					Auth:          value.Auth,
+		// Auto-generate www variants for domains - VYPNUTO
+		// Všechno se bere jen z konfigurace, žádné auto-generování
+		/*
+			if key != config.GoogleAuth.AuthDomain { // Skip auth domain
+				var alternativeDomain string
+				if strings.HasPrefix(key, "www.") {
+					// If domain starts with www., also add version without www.
+					alternativeDomain = strings.TrimPrefix(key, "www.")
+				} else if !strings.Contains(key, ":") && !strings.HasPrefix(key, "localhost") { // Only add www. for domains without port and not localhost
+					// If domain doesn't start with www., also add www. version
+					alternativeDomain = "www." + key
 				}
 
-				for _, ip := range value.IPBlackList {
-					alternativeConfig.IPBlackList[ip] = true
-				}
+				if alternativeDomain != "" && alternativeDomain != key {
+					// Create a copy of the rate limit config for the alternative domain
+					alternativeConfig := RateLimitConfig{
+						Destination:   value.Destination,
+						Requests:      value.Requests,
+						PerSecond:     value.PerSecond,
+						IPBlackList:   make(map[string]bool),
+						AllowedEmails: value.AllowedEmails,
+						Auth:          value.Auth,
+					}
 
-				globalConfig.RateLimits[alternativeDomain] = alternativeConfig
-				fmt.Printf("Auto-generated domain variant: %s -> %s\n", key, alternativeDomain)
+					for _, ip := range value.IPBlackList {
+						alternativeConfig.IPBlackList[ip] = true
+					}
+
+					globalConfig.RateLimits[alternativeDomain] = alternativeConfig
+					fmt.Printf("Auto-generated domain variant: %s -> %s\n", key, alternativeDomain)
+				}
 			}
-		}
+		*/
 	}
 
 	// Copy global blacklist to all rate limits

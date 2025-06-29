@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
@@ -137,16 +138,30 @@ func (ga *GoogleAuthenticator) GetAuthDomain(targetDomain string) string {
 func (ga *GoogleAuthenticator) SetAuthCookie(w http.ResponseWriter, userInfo *GoogleUserInfo) {
 	// Set cookie for all shared domains
 	for _, domain := range ga.cfg.GoogleAuth.SharedDomains {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "google_auth",
-			Value:    userInfo.Email,
-			Path:     "/",
-			Domain:   domain,
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteNoneMode,
-			Expires:  time.Now().Add(24 * time.Hour),
-		})
+		// Pro localhost nepoužíváme Domain parametr
+		if strings.Contains(domain, "localhost") {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "google_auth",
+				Value:    userInfo.Email,
+				Path:     "/",
+				HttpOnly: true,
+				Secure:   false, // localhost není HTTPS
+				SameSite: http.SameSiteLaxMode,
+				Expires:  time.Now().Add(24 * time.Hour),
+			})
+		} else {
+			// Pro ostatní domény nastavíme Domain parametr pro lepší sdílení
+			http.SetCookie(w, &http.Cookie{
+				Name:     "google_auth",
+				Value:    userInfo.Email,
+				Path:     "/",
+				Domain:   domain,
+				HttpOnly: true,
+				Secure:   true,
+				SameSite: http.SameSiteNoneMode,
+				Expires:  time.Now().Add(24 * time.Hour),
+			})
+		}
 	}
 }
 
@@ -159,30 +174,65 @@ func (ga *GoogleAuthenticator) IsAuthenticated(r *http.Request) bool {
 
 	// Check cookie for all shared domains
 	for _, domain := range ga.cfg.GoogleAuth.SharedDomains {
-		// Create new request with modified host for cookie check
-		req := r.Clone(r.Context())
-		req.Host = domain
-		cookie, err = req.Cookie("google_auth")
-		if err == nil && cookie.Value != "" {
-			return true
+		// Pro localhost zkontrolujeme přímo
+		if strings.Contains(domain, "localhost") && r.Host == domain {
+			cookie, err = r.Cookie("google_auth")
+			if err == nil && cookie.Value != "" {
+				return true
+			}
+		} else {
+			// Pro ostatní domény zkontrolujeme cross-domain cookies
+			if isSubdomainOrSame(r.Host, domain) {
+				cookie, err = r.Cookie("google_auth")
+				if err == nil && cookie.Value != "" {
+					return true
+				}
+			}
 		}
 	}
 
 	return false
 }
 
+// isSubdomainOrSame checks if host is a subdomain of domain or the same domain
+func isSubdomainOrSame(host, domain string) bool {
+	if host == domain {
+		return true
+	}
+
+	// Remove port if present
+	if idx := strings.Index(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+
+	// Check if host ends with domain (for subdomains)
+	return strings.HasSuffix(host, "."+domain) || host == domain
+}
+
 func (ga *GoogleAuthenticator) Logout(w http.ResponseWriter) {
 	// Remove cookie for all shared domains
 	for _, domain := range ga.cfg.GoogleAuth.SharedDomains {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "google_auth",
-			Value:    "",
-			Path:     "/",
-			Domain:   domain,
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteNoneMode,
-			MaxAge:   -1,
-		})
+		if strings.Contains(domain, "localhost") {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "google_auth",
+				Value:    "",
+				Path:     "/",
+				HttpOnly: true,
+				Secure:   false,
+				SameSite: http.SameSiteLaxMode,
+				MaxAge:   -1,
+			})
+		} else {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "google_auth",
+				Value:    "",
+				Path:     "/",
+				Domain:   domain,
+				HttpOnly: true,
+				Secure:   true,
+				SameSite: http.SameSiteNoneMode,
+				MaxAge:   -1,
+			})
+		}
 	}
 }
