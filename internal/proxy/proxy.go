@@ -242,9 +242,22 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 
 	// Create the final handler
 	finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Try to find target configuration for the host
 		target, ok := p.config.RateLimits[host]
 		if !ok {
-			http.Error(w, fmt.Sprintf("Host (%s) not found", host), http.StatusBadGateway)
+			// If not found, try with normalized domain (without www prefix)
+			normalizedHost := p.normalizeDomain(host)
+			if normalizedHost != host {
+				target, ok = p.config.RateLimits[normalizedHost]
+				if ok {
+					// Use normalized host for further processing
+					host = normalizedHost
+				}
+			}
+		}
+
+		if !ok {
+			http.Error(w, fmt.Sprintf("Host (%s) not found", r.Host), http.StatusBadGateway)
 			return
 		}
 
