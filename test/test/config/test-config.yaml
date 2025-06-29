@@ -1,0 +1,14 @@
+ipHeader:
+  headers:
+    - "X-Forwarded-For"
+    - "X-Real-IP"
+
+googleAuth:
+  enabled: false
+  authDomain: "auth.test.com"
+
+rateLimits:
+  test.com:
+    destination: "http://localhost:8081"
+    perSecond: 3
+    requests: 5

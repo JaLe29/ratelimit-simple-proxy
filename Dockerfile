@@ -2,6 +2,7 @@
 FROM golang:1.24-alpine as builder
 
 WORKDIR /app
+RUN mkdir -p /app
 
 COPY ./go.mod								./go.mod
 COPY ./go.sum								./go.sum
@@ -13,6 +14,6 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o build/main /app/cmd/app/ma
 # Production image
 FROM gcr.io/distroless/static
 
-COPY --from=builder /app/build/main /main
+COPY --from=builder /app /app
 
-CMD ["/main"]
+CMD ["/app/build/main"]

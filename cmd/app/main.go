@@ -27,14 +27,18 @@ func main() {
 	}
 
 	// Create HTTP server
+	port := os.Getenv("PROXY_PORT")
+	if port == "" {
+		port = "8080"
+	}
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + port,
 		Handler: createHandler(config, proxy),
 	}
 
 	// Start server in a goroutine
 	go func() {
-		log.Println("Starting proxy on :8080")
+		log.Printf("Starting proxy on :%s", port)
 		for key, value := range config.RateLimits {
 			log.Printf("Rate limit for %s: %v\n", key, value)
 		}
