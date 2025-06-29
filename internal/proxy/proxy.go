@@ -225,8 +225,10 @@ func (p *Proxy) getOrCreateProxy(targetURL *url.URL, clientIp string) *httputil.
 }
 
 func (p *Proxy) getOrCreateHandler(host string) http.Handler {
+	normalizedHost := p.normalizeDomain(host)
+
 	p.handlerMutex.RLock()
-	if handler, exists := p.handlerCache[host]; exists {
+	if handler, exists := p.handlerCache[normalizedHost]; exists {
 		p.handlerMutex.RUnlock()
 		return handler
 	}
@@ -236,26 +238,13 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 	defer p.handlerMutex.Unlock()
 
 	// Double-check after acquiring write lock
-	if handler, exists := p.handlerCache[host]; exists {
+	if handler, exists := p.handlerCache[normalizedHost]; exists {
 		return handler
 	}
 
 	// Create the final handler
 	finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Try to find target configuration for the host
-		target, ok := p.config.RateLimits[host]
-		if !ok {
-			// If not found, try with normalized domain (without www prefix)
-			normalizedHost := p.normalizeDomain(host)
-			if normalizedHost != host {
-				target, ok = p.config.RateLimits[normalizedHost]
-				if ok {
-					// Use normalized host for further processing
-					host = normalizedHost
-				}
-			}
-		}
-
+		target, ok := p.config.RateLimits[normalizedHost]
 		if !ok {
 			http.Error(w, fmt.Sprintf("Host (%s) not found", r.Host), http.StatusBadGateway)
 			return
@@ -272,15 +261,14 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 		}
 
 		// Normalize domain for consistent metrics
-		normalizedDomain := p.normalizeDomain(host)
-		p.metric.RequestsTotal.WithLabelValues(normalizedDomain).Inc()
+		p.metric.RequestsTotal.WithLabelValues(normalizedHost).Inc()
 
 		// Create response time writer
 		rtw := &responseTimeWriter{
 			ResponseWriter: w,
 			startTime:      time.Now(),
 			metric:         p.metric,
-			origin:         normalizedDomain,
+			origin:         normalizedHost,
 			recorded:       false,
 		}
 
@@ -295,14 +283,14 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 	var handler http.Handler = finalHandler
 
 	// Add rate limiting middleware
-	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[host], host, p.getClientIp).Handle(handler)
+	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[normalizedHost], normalizedHost, p.getClientIp).Handle(handler)
 
 	// Add authentication middleware if enabled
 	if p.auth != nil {
-		handler = middleware.NewAuthMiddleware(p.config, p.auth, host, p.loginTemplate).Handle(handler)
+		handler = middleware.NewAuthMiddleware(p.config, p.auth, normalizedHost, p.loginTemplate).Handle(handler)
 	}
 
-	p.handlerCache[host] = handler
+	p.handlerCache[normalizedHost] = handler
 	return handler
 }
 
