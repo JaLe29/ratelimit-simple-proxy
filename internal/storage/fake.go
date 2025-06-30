@@ -11,3 +11,7 @@ func NewFakeStorage() *IPFakeStorage {
 func (r *IPFakeStorage) CheckLimit(ipAddress string) bool {
 	return false
 }
+
+func (r *IPFakeStorage) Close() error {
+	return nil
+}

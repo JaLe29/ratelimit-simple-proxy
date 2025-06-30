@@ -86,10 +86,10 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) (*Proxy, error) {
 		if target.PerSecond == -1 && target.Requests == -1 {
 			store := storage.NewFakeStorage()
 			limiters[host] = store
-			fmt.Println("Host:", host, "is using fake storage")
+			log.Printf("Host %s: using fake storage (no rate limiting)", host)
 		} else {
 			var store storage.Storage = storage.NewIPRateLimiter(target.PerSecond, target.Requests)
-			fmt.Println("Host:", host, "is using ip rate limiter")
+			log.Printf("Host %s: using IP rate limiter (%d req/%ds)", host, target.Requests, target.PerSecond)
 			limiters[host] = store
 		}
 	}
@@ -102,7 +102,7 @@ func NewProxy(cfg *config.Config, metric *metric.Metric) (*Proxy, error) {
 			cfg.GoogleAuth.RedirectURL,
 			cfg,
 		)
-		fmt.Println("Google authentication is enabled globally")
+		log.Println("Google authentication is enabled globally")
 	}
 
 	// Load login template once at startup
@@ -208,12 +208,21 @@ func (p *Proxy) getOrCreateProxy(targetURL *url.URL, clientIp string) *httputil.
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+
+	// Optimize transport for better performance using config values
+	proxy.Transport = &http.Transport{
+		MaxIdleConns:        p.config.Transport.MaxIdleConns,
+		MaxIdleConnsPerHost: p.config.Transport.MaxIdleConnsPerHost,
+		IdleConnTimeout:     p.config.Transport.IdleConnTimeout,
+		TLSHandshakeTimeout: p.config.Transport.TLSHandshakeTimeout,
+		DisableCompression:  p.config.Transport.DisableCompression,
+	}
+
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
-		fmt.Println("Request Host Origin:", p.normalizeDomain(req.Host))
-		//req.Header.Set("Origin", p.normalizeDomain(req.Host))
-		//req.Header.Set("Host", (req.Host))
+		// Remove debug print for production performance
+		// fmt.Println("Request Host Origin:", p.normalizeDomain(req.Host))
 
 		req.Header.Set("X-Forwarded-Host", req.Host)
 		req.Header.Set("X-Forwarded-Proto", req.URL.Scheme)
@@ -251,8 +260,9 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 		}
 
 		clientIp := p.getClientIp(r)
-		fmt.Println("Client IP:", clientIp)
-		fmt.Println("URL:", r.URL.RequestURI())
+		// Remove debug prints for production performance
+		// fmt.Println("Client IP:", clientIp)
+		// fmt.Println("URL:", r.URL.RequestURI())
 
 		targetURL, err := url.Parse(target.Destination)
 		if err != nil {
@@ -283,7 +293,7 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 	var handler http.Handler = finalHandler
 
 	// Add rate limiting middleware
-	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[normalizedHost], normalizedHost, p.getClientIp).Handle(handler)
+	handler = middleware.NewRateLimitMiddleware(p.config, p.limiters[normalizedHost], normalizedHost, p.getClientIp, p.metric).Handle(handler)
 
 	// Add authentication middleware if enabled
 	if p.auth != nil {
@@ -298,12 +308,10 @@ func (p *Proxy) getOrCreateHandler(host string) http.Handler {
 func (p *Proxy) Shutdown(ctx context.Context) error {
 	log.Println("Shutting down proxy...")
 
-	// Clean up rate limiters
+	// Clean up rate limiters - now using proper Close() interface
 	for host, limiter := range p.limiters {
-		if closer, ok := limiter.(interface{ Close() error }); ok {
-			if err := closer.Close(); err != nil {
-				log.Printf("Error closing limiter for %s: %v", host, err)
-			}
+		if err := limiter.Close(); err != nil {
+			log.Printf("Error closing limiter for %s: %v", host, err)
 		}
 	}
 

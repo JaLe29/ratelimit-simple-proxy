@@ -3,6 +3,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -48,6 +51,12 @@ func LoadConfig(configPath string) (*Config, error) {
 	} else {
 		fmt.Println("Configuration file not found, using default values")
 	}
+
+	// Set performance defaults
+	setPerformanceDefaults(config)
+
+	// Override with environment variables
+	overrideWithEnv(config)
 
 	// Validate configuration
 	if len(config.IPHeader.Headers) == 0 {
@@ -105,6 +114,8 @@ func LoadConfig(configPath string) (*Config, error) {
 		IPHeader:   config.IPHeader,
 		GoogleAuth: config.GoogleAuth,
 		RateLimits: make(map[string]RateLimitConfig),
+		Server:     config.Server,
+		Transport:  config.Transport,
 	}
 
 	for key, value := range config.RateLimits {
@@ -168,4 +179,107 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	return globalConfig, nil
+}
+
+// setPerformanceDefaults sets optimal performance defaults
+func setPerformanceDefaults(config *config) {
+	// Server defaults for performance
+	if config.Server.ReadTimeout == 0 {
+		config.Server.ReadTimeout = 30 * time.Second
+	}
+	if config.Server.WriteTimeout == 0 {
+		config.Server.WriteTimeout = 30 * time.Second
+	}
+	if config.Server.IdleTimeout == 0 {
+		config.Server.IdleTimeout = 120 * time.Second
+	}
+	if config.Server.MaxHeaderBytes == 0 {
+		config.Server.MaxHeaderBytes = 1 << 20 // 1 MB
+	}
+
+	// Transport defaults for performance
+	if config.Transport.MaxIdleConns == 0 {
+		config.Transport.MaxIdleConns = 100
+	}
+	if config.Transport.MaxIdleConnsPerHost == 0 {
+		config.Transport.MaxIdleConnsPerHost = 10
+	}
+	if config.Transport.IdleConnTimeout == 0 {
+		config.Transport.IdleConnTimeout = 90 * time.Second
+	}
+	if config.Transport.TLSHandshakeTimeout == 0 {
+		config.Transport.TLSHandshakeTimeout = 10 * time.Second
+	}
+}
+
+// overrideWithEnv overrides configuration with environment variables
+func overrideWithEnv(config *config) {
+	// Server timeouts
+	if val := os.Getenv("SERVER_READ_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Server.ReadTimeout = duration
+		}
+	}
+	if val := os.Getenv("SERVER_WRITE_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Server.WriteTimeout = duration
+		}
+	}
+	if val := os.Getenv("SERVER_IDLE_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Server.IdleTimeout = duration
+		}
+	}
+	if val := os.Getenv("SERVER_MAX_HEADER_BYTES"); val != "" {
+		if num, err := strconv.Atoi(val); err == nil {
+			config.Server.MaxHeaderBytes = num
+		}
+	}
+
+	// Transport settings
+	if val := os.Getenv("TRANSPORT_MAX_IDLE_CONNS"); val != "" {
+		if num, err := strconv.Atoi(val); err == nil {
+			config.Transport.MaxIdleConns = num
+		}
+	}
+	if val := os.Getenv("TRANSPORT_MAX_IDLE_CONNS_PER_HOST"); val != "" {
+		if num, err := strconv.Atoi(val); err == nil {
+			config.Transport.MaxIdleConnsPerHost = num
+		}
+	}
+	if val := os.Getenv("TRANSPORT_IDLE_CONN_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Transport.IdleConnTimeout = duration
+		}
+	}
+	if val := os.Getenv("TRANSPORT_TLS_HANDSHAKE_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Transport.TLSHandshakeTimeout = duration
+		}
+	}
+
+	// Google Auth
+	if config.GoogleAuth != nil {
+		if val := os.Getenv("GOOGLE_CLIENT_ID"); val != "" {
+			config.GoogleAuth.ClientID = val
+		}
+		if val := os.Getenv("GOOGLE_CLIENT_SECRET"); val != "" {
+			config.GoogleAuth.ClientSecret = val
+		}
+		if val := os.Getenv("GOOGLE_AUTH_DOMAIN"); val != "" {
+			config.GoogleAuth.AuthDomain = val
+		}
+		if val := os.Getenv("GOOGLE_REDIRECT_URL"); val != "" {
+			config.GoogleAuth.RedirectURL = val
+		}
+	}
+
+	// IP Blacklist from environment
+	if val := os.Getenv("IP_BLACKLIST"); val != "" {
+		ips := strings.Split(val, ",")
+		for i, ip := range ips {
+			ips[i] = strings.TrimSpace(ip)
+		}
+		config.IPBlackList = append(config.IPBlackList, ips...)
+	}
 }

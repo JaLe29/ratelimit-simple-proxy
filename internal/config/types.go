@@ -1,5 +1,24 @@
 package config
 
+import "time"
+
+// ServerConfig represents server-specific configuration
+type ServerConfig struct {
+	ReadTimeout    time.Duration `yaml:"readTimeout"`
+	WriteTimeout   time.Duration `yaml:"writeTimeout"`
+	IdleTimeout    time.Duration `yaml:"idleTimeout"`
+	MaxHeaderBytes int           `yaml:"maxHeaderBytes"`
+}
+
+// TransportConfig represents HTTP transport configuration
+type TransportConfig struct {
+	MaxIdleConns        int           `yaml:"maxIdleConns"`
+	MaxIdleConnsPerHost int           `yaml:"maxIdleConnsPerHost"`
+	IdleConnTimeout     time.Duration `yaml:"idleConnTimeout"`
+	TLSHandshakeTimeout time.Duration `yaml:"tlsHandshakeTimeout"`
+	DisableCompression  bool          `yaml:"disableCompression"`
+}
+
 // Local types
 type rateLimitConfig struct {
 	Destination   string      `yaml:"destination"`
@@ -21,6 +40,8 @@ type config struct {
 	GoogleAuth  *GoogleAuth                `yaml:"googleAuth"`
 	RateLimits  map[string]rateLimitConfig `yaml:"rateLimits"`
 	IPBlackList []string                   `yaml:"ipBlackList"`
+	Server      ServerConfig               `yaml:"server"`
+	Transport   TransportConfig            `yaml:"transport"`
 }
 
 // Global types
@@ -57,4 +78,6 @@ type Config struct {
 	IPHeader   IPHeaderConfig             `yaml:"ipHeader"`
 	GoogleAuth *GoogleAuth                `yaml:"googleAuth"`
 	RateLimits map[string]RateLimitConfig `yaml:"rateLimits"`
+	Server     ServerConfig               `yaml:"server"`
+	Transport  TransportConfig            `yaml:"transport"`
 }

@@ -26,14 +26,18 @@ func main() {
 		log.Fatalf("Error creating proxy: %v", err)
 	}
 
-	// Create HTTP server
+	// Create HTTP server with production-ready configuration
 	port := os.Getenv("PROXY_PORT")
 	if port == "" {
 		port = "8080"
 	}
 	server := &http.Server{
-		Addr:    ":" + port,
-		Handler: createHandler(config, proxy),
+		Addr:           ":" + port,
+		Handler:        createHandler(config, proxy),
+		ReadTimeout:    config.Server.ReadTimeout,
+		WriteTimeout:   config.Server.WriteTimeout,
+		IdleTimeout:    config.Server.IdleTimeout,
+		MaxHeaderBytes: config.Server.MaxHeaderBytes,
 	}
 
 	// Start server in a goroutine

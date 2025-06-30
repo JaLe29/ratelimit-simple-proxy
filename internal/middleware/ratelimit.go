@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/config"
+	"github.com/JaLe29/ratelimit-simple-proxy/internal/metric"
 	"github.com/JaLe29/ratelimit-simple-proxy/internal/storage"
 )
 
@@ -14,15 +15,17 @@ type RateLimitMiddleware struct {
 	limiter storage.Storage
 	host    string
 	getIP   func(*http.Request) string
+	metric  *metric.Metric
 }
 
 // NewRateLimitMiddleware creates a new rate limiting middleware
-func NewRateLimitMiddleware(cfg *config.Config, limiter storage.Storage, host string, getIP func(*http.Request) string) *RateLimitMiddleware {
+func NewRateLimitMiddleware(cfg *config.Config, limiter storage.Storage, host string, getIP func(*http.Request) string, metric *metric.Metric) *RateLimitMiddleware {
 	return &RateLimitMiddleware{
 		config:  cfg,
 		limiter: limiter,
 		host:    host,
 		getIP:   getIP,
+		metric:  metric,
 	}
 }
 
@@ -45,6 +48,10 @@ func (m *RateLimitMiddleware) Handle(next http.Handler) http.Handler {
 
 		// Check rate limit
 		if m.limiter.CheckLimit(clientIP) {
+			// Record rate limit hit metric
+			if m.metric != nil {
+				m.metric.RateLimitHits.WithLabelValues(m.host, clientIP).Inc()
+			}
 			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
